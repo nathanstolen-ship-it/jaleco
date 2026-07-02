@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Jaleco · Estudos de Medicina</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Jaleco">
+<meta name="theme-color" content="#FBF6F1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%238E2D4B'/%3E%3Cpath d='M25 55 L38 55 L44 42 L52 68 L58 50 L64 55 L78 55' stroke='white' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FBF6F1; --card:#FFFFFF; --ink:#2E222B; --mut:#8B7A85; --line:#EDE2E0;
+  --brand:#8E2D4B; --brand-soft:#F5E4EA; --gold:#C9A227; --ok:#5B7B6C; --ok-soft:#E7EFEA;
+  --danger:#B3453F; --shadow:0 6px 24px rgba(46,34,43,.07);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:'Instrument Sans',system-ui,sans-serif;
+  background:var(--bg); color:var(--ink);
+  padding-bottom:calc(84px + env(safe-area-inset-bottom));
+  transition:background .3s,color .3s;
+}
+h1,h2,h3,.serif{font-family:'Fraunces',Georgia,serif}
+button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer}
+input,select,textarea{
+  font-family:inherit;font-size:16px;color:var(--ink);
+  background:var(--card);border:1.5px solid var(--line);border-radius:14px;
+  padding:12px 14px;width:100%;outline:none;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+textarea{resize:vertical;min-height:90px}
+label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 0 6px}
+
+.screen{display:none;max-width:640px;margin:0 auto;padding:18px 18px 30px;padding-top:calc(18px + env(safe-area-inset-top))}
+.screen.active{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+.h-page{font-size:30px;font-weight:600;letter-spacing:-.01em;margin:2px 0 4px}
+.sub{color:var(--mut);font-size:14.5px;line-height:1.45}
+
+.card{background:var(--card);border-radius:20px;padding:18px;box-shadow:var(--shadow);margin-top:14px}
+.row{display:flex;align-items:center;gap:12px}
+.grow{flex:1;min-width:0}
+.right{margin-left:auto}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--brand);color:#fff;font-weight:600;font-size:15.5px;
+  border-radius:16px;padding:14px 20px;width:100%;
+  transition:transform .1s;
+}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--brand-soft);color:var(--brand)}
+.btn.quiet{background:transparent;color:var(--brand);padding:10px}
+.btn.small{width:auto;padding:9px 14px;font-size:14px;border-radius:12px}
+.btn.danger{background:transparent;color:var(--danger)}
+
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:100px;background:var(--brand-soft);color:var(--brand)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.tag-mut{font-size:12.5px;color:var(--mut)}
+
+/* Nav */
+nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:50;
+  background:var(--card);border-top:1px solid var(--line);
+  padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+  display:flex;justify-content:space-around;max-width:100%;
+}
+nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--mut);padding:4px 10px;border-radius:12px}
+nav button.on{color:var(--brand)}
+nav svg{width:23px;height:23px}
+
+/* ECG streak */
+.ecg-wrap{position:relative;margin-top:6px}
+.ecg{width:100%;height:64px;display:block}
+.ecg path{stroke:var(--brand);stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.pulse{fill:var(--brand);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;r:4}50%{opacity:.35;r:5.5}}
+
+/* Progress ring */
+.ring{transform:rotate(-90deg)}
+.ring .track{stroke:var(--brand-soft);fill:none}
+.ring .val{stroke:var(--brand);fill:none;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+
+/* Lists */
+.item{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.check{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;transition:all .15s}
+.check.on{background:var(--ok);border-color:var(--ok)}
+.strike{text-decoration:line-through;color:var(--mut)}
+
+/* Day picker */
+.days{display:flex;gap:6px;overflow-x:auto;margin-top:14px;padding-bottom:4px}
+.days button{flex:1;min-width:42px;padding:10px 4px;border-radius:14px;background:var(--card);font-weight:600;font-size:13px;color:var(--mut);border:1.5px solid var(--line)}
+.days button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+
+/* Flashcard review */
+.overlay{position:fixed;inset:0;background:var(--bg);z-index:100;display:none;flex-direction:column;padding:18px;padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:calc(18px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+.overlay.active{display:flex}
+.fcard{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  background:var(--card);border-radius:24px;box-shadow:var(--shadow);padding:28px;margin:14px 0;
+  font-size:21px;line-height:1.45;overflow-y:auto;white-space:pre-wrap;
+}
+.fcard .face-label{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+.fimg{max-width:100%;max-height:36vh;border-radius:12px;margin:10px auto;display:block;object-fit:contain}
+.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grade button{padding:13px 4px;border-radius:14px;font-weight:700;font-size:14px;color:#fff}
+.g0{background:#B3453F}.g3{background:#C08A2D}.g4{background:var(--ok)}.g5{background:#3E6B8C}
+.grade small{display:block;font-weight:500;font-size:10.5px;opacity:.85;margin-top:2px}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(30,20,28,.45);z-index:90;display:none;align-items:flex-end;justify-content:center}
+.modal-bg.active{display:flex}
+.modal{background:var(--card);border-radius:24px 24px 0 0;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;padding:22px 20px calc(26px + env(safe-area-inset-bottom));animation:up .25s ease}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.modal h3{font-size:21px;margin-bottom:2px}
+.handle{width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 16px}
+
+/* Bars chart */
+.bars{display:flex;align-items:flex-end;gap:8px;height:110px;margin-top:16px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.bars .fill{width:100%;max-width:34px;border-radius:8px 8px 4px 4px;background:var(--brand);min-height:3px;transition:height .5s ease}
+.bars .lbl{font-size:11px;font-weight:600;color:var(--mut)}
+
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.stat{background:var(--card);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.stat .n{font-family:'Fraunces',serif;font-size:28px;font-weight:600;color:var(--brand)}
+.stat .l{font-size:12.5px;color:var(--mut);font-weight:600;margin-top:2px}
+
+.color-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.color-row button{width:34px;height:34px;border-radius:50%;border:3px solid transparent}
+.color-row button.on{border-color:var(--ink)}
+
+.theme-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:6px}
+.theme-row button{padding:14px;border-radius:16px;border:2px solid var(--line);font-weight:600;font-size:14px;text-align:left}
+.theme-row button.on{border-color:var(--brand)}
+.theme-row .sw{display:flex;gap:5px;margin-top:8px}
+.theme-row .sw i{width:16px;height:16px;border-radius:50%}
+
+.prompt-card{margin-top:12px}
+.prompt-card p{font-size:14px;color:var(--mut);margin:4px 0 10px;line-height:1.4}
+
+.empty{text-align:center;padding:34px 16px;color:var(--mut);font-size:14.5px;line-height:1.5}
+.empty .big{font-size:34px;display:block;margin-bottom:8px}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--ink);color:var(--bg);font-weight:600;font-size:14px;
+  padding:12px 20px;border-radius:100px;z-index:200;opacity:0;transition:all .3s;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Pomodoro */
+.pomo-time{font-family:'Fraunces',serif;font-size:76px;font-weight:600;text-align:center;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pomo-phase{text-align:center;font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
+</style>
+</head>
+<body>
+<!-- ============ TELAS ============ -->
+<div class="screen" id="scr-hoje"></div>
+<div class="screen" id="scr-plano"></div>
+<div class="screen" id="scr-cards"></div>
+<div class="screen" id="scr-foco"></div>
+<div class="screen" id="scr-mais"></div>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <button data-nav="hoje"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Hoje</button>
+  <button data-nav="plano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Plano</button>
+  <button data-nav="cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2.5"/><path d="M7 8V6a2 2 0 012-2h9a2 2 0 012 2v9"/></svg>Cards</button>
+  <button data-nav="foco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>Foco</button>
+  <button data-nav="mais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Mais</button>
+</nav>
+
+<!-- ============ REVISÃO (overlay) ============ -->
+<div class="overlay" id="review">
+  <div class="row">
+    <button class="btn small ghost" onclick="fecharReview()">Sair</button>
+    <div class="grow" style="text-align:center;font-weight:700" id="rv-count"></div>
+    <div style="width:64px"></div>
+  </div>
+  <div class="fcard" id="rv-card" onclick="virarCard()"></div>
+  <div id="rv-actions"></div>
+</div>
+
+<!-- ============ MODAL genérico ============ -->
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)fecharModal()">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= ESTADO ================= */
+const CORES = ['#8E2D4B','#3E6B8C','#5B7B6C','#C08A2D','#7A5296','#B3453F','#2F7E8C','#8C6A4F'];
+const TEMAS = {
+  vinho:  {nome:'Vinho',   bg:'#FBF6F1', card:'#FFFFFF', ink:'#2E222B', mut:'#8B7A85', line:'#EDE2E0', brand:'#8E2D4B', soft:'#F5E4EA', gold:'#C9A227', ok:'#5B7B6C', okSoft:'#E7EFEA', dark:false},
+  oceano: {nome:'Oceano',  bg:'#F3F7F8', card:'#FFFFFF', ink:'#1F2E38', mut:'#71858F', line:'#DFE9EC', brand:'#2F6E8C', soft:'#E1EEF4', gold:'#C08A2D', ok:'#4E7D6B', okSoft:'#E4EFEA', dark:false},
+  salvia: {nome:'Sálvia',  bg:'#F5F7F2', card:'#FFFFFF', ink:'#26302A', mut:'#7C877E', line:'#E3E9E0', brand:'#4E6E52', soft:'#E5EEE4', gold:'#B98A2E', ok:'#4E6E52', okSoft:'#E5EEE4', dark:false},
+  noite:  {nome:'Noite',   bg:'#17141A', card:'#241F29', ink:'#F2ECF0', mut:'#9C8FA0', line:'#372F3D', brand:'#D96A8F', soft:'#3A2733', gold:'#D9B24C', ok:'#7FA98F', okSoft:'#26332C', dark:true},
+};
+const FRASES = [
+  'Um dia de cada vez, um sistema de cada vez.',
+  'Você não precisa ser perfeita, só constante.',
+  'O jaleco que você vai vestir começa aqui.',
+  'Revisar hoje é lembrar na prova.',
+  'Pequenos blocos de foco viram grandes conquistas.',
+  'Cada card revisado é um neurônio a seu favor.',
+  'Estude como quem cuida: com atenção e carinho.',
+  'A médica que você será agradece o esforço de hoje.',
+];
+
+let S = null;
+const PADRAO = () => ({
+  nome:'Gabi', tema:'vinho', metaHoras:15,
+  pomo:{foco:25, pausa:5},
+  materias:[], blocos:[], decks:[], cards:[],
+  sessoes:[], reviews:{}, atividade:{},
+  onboarded:false,
+  sync:{codigo:null}, atualizadoEm:0, midias:{}
+});
+
+function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
+function salvar(){ S.atualizadoEm=Date.now(); salvarLocal(); agendarPush(); }
+function carregar(){
+  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); return; } }catch(e){}
+  S = PADRAO();
+}
+
+/* ================= HELPERS ================= */
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+const esc = t => String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const hojeStr = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+function diaSemana(d=new Date()){ return (d.getDay()+6)%7; } // 0=Seg
+function dataDoDia(idx){ // data (YYYY-MM-DD) do dia idx na semana atual
+  const d = new Date(); d.setDate(d.getDate() - diaSemana(d) + idx); return hojeStr(d);
+}
+function addDias(str, n){ const [y,m,dd]=str.split('-').map(Number); const d=new Date(y,m-1,dd+n); return hojeStr(d); }
+function materia(id){ return S.materias.find(m=>m.id===id); }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
+function marcarAtividade(){ S.atividade[hojeStr()]=true; }
+
+function streak(){
+  let n=0, d=hojeStr();
+  if(!S.atividade[d]) d=addDias(d,-1); // hoje ainda não conta contra
+  while(S.atividade[d]){ n++; d=addDias(d,-1); }
+  return n;
+}
+function cardsVencidos(){ const h=hojeStr(); return S.cards.filter(c=>c.due<=h); }
+function minutosSemana(){
+  const ini=dataDoDia(0), fim=dataDoDia(6);
+  return S.sessoes.filter(s=>s.data>=ini&&s.data<=fim).reduce((a,s)=>a+s.min,0);
+}
+function aplicarTema(){
+  const t = TEMAS[S.tema]||TEMAS.vinho, r=document.documentElement.style;
+  r.setProperty('--bg',t.bg); r.setProperty('--card',t.card); r.setProperty('--ink',t.ink);
+  r.setProperty('--mut',t.mut); r.setProperty('--line',t.line); r.setProperty('--brand',t.brand);
+  r.setProperty('--brand-soft',t.soft); r.setProperty('--gold',t.gold); r.setProperty('--ok',t.ok); r.setProperty('--ok-soft',t.okSoft);
+  r.setProperty('--shadow', t.dark ? '0 6px 24px rgba(0,0,0,.3)' : '0 6px 24px rgba(46,34,43,.07)');
+  document.querySelector('meta[name=theme-color]').content = t.bg;
+}
+
+/* ================= NAVEGAÇÃO ================= */
+let telaAtual='hoje';
+function nav(tela){
+  telaAtual=tela;
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('#scr-'+tela).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.nav===tela));
+  render();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.nav));
+
+function render(){
+  ({hoje:renderHoje, plano:renderPlano, cards:renderCards, foco:renderFoco, mais:renderMais})[telaAtual]();
+}
+
+/* ================= MODAL ================= */
+function abrirModal(html){ $('#modal-box').innerHTML='<div class="handle"></div>'+html; $('#modal-bg').classList.add('active'); }
+function fecharModal(){ $('#modal-bg').classList.remove('active'); }
+
+/* ================= TELA: HOJE ================= */
+function ecgSVG(){
+  const dias=14, w=320, h=64, mid=38, seg=w/dias;
+  let d='M0 '+mid, hojeIdx=dias-1;
+  for(let i=0;i<dias;i++){
+    const data=addDias(hojeStr(), i-(dias-1));
+    const x=i*seg, ativo=S.atividade[data];
+    if(ativo){
+      d+=` L${(x+seg*0.25).toFixed(1)} ${mid} L${(x+seg*0.42).toFixed(1)} ${mid-20} L${(x+seg*0.62).toFixed(1)} ${mid+14} L${(x+seg*0.78).toFixed(1)} ${mid-6} L${(x+seg).toFixed(1)} ${mid}`;
+    } else {
+      d+=` L${(x+seg).toFixed(1)} ${mid}`;
+    }
+  }
+  const px=(hojeIdx+0.9)*seg;
+  return `<svg class="ecg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d}"/><circle class="pulse" cx="${px}" cy="${mid}" r="4"/></svg>`;
+}
+function saudacao(){
+  const h=new Date().getHours();
+  return h<5?'Boa madrugada':h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+}
+function renderHoje(){
+  const st=streak(), venc=cardsVencidos().length;
+  const min=minutosSemana(), meta=S.metaHoras*60, pct=Math.min(1,meta?min/meta:0);
+  const R=34, C=2*Math.PI*R;
+  const hoje=diaSemana(), dataHoje=hojeStr();
+  const blocosHoje=S.blocos.filter(b=>b.dia===hoje);
+  const feitos=blocosHoje.filter(b=>b.feito&&b.feito[dataHoje]).length;
+  const frase=FRASES[Math.floor(new Date().getDate()+new Date().getMonth())%FRASES.length];
+
+  $('#scr-hoje').innerHTML=`
+    <div class="eyebrow">Jaleco</div>
+    <h1 class="h-page">${saudacao()}, ${esc(S.nome)}</h1>
+    <div class="sub serif" style="font-style:italic">“${frase}”</div>
+
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div style="font-weight:700;font-size:15px">Constância</div>
+          <div class="tag-mut">últimos 14 dias</div>
+        </div>
+        <div class="chip">🔥 ${st} ${st===1?'dia':'dias'}</div>
+      </div>
+      <div class="ecg-wrap">${ecgSVG()}</div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <svg class="ring" width="86" height="86" viewBox="0 0 86 86">
+          <circle class="track" cx="43" cy="43" r="${R}" stroke-width="9"/>
+          <circle class="val" cx="43" cy="43" r="${R}" stroke-width="9" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/>
+        </svg>
+        <div class="grow">
+          <div style="font-weight:700;font-size:15px">Meta da semana</div>
+          <div class="tag-mut">${(min/60).toFixed(1).replace('.',',')}h de ${S.metaHoras}h de foco</div>
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--brand);margin-top:2px">${Math.round(pct*100)}%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" onclick="nav('cards')" style="cursor:pointer">
+      <div class="row">
+        <div class="grow">
+          <div style="font-weight:700;font-size:15px">Revisão espaçada</div>
+          <div class="tag-mut">${venc? venc+' card'+(venc>1?'s':'')+' esperando você':'Tudo em dia por hoje ✨'}</div>
+        </div>
+        ${venc?'<button class="btn small" onclick="event.stopPropagation();iniciarReview()">Revisar</button>':''}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:4px">
+        <div class="grow" style="font-weight:700;font-size:15px">Plano de hoje · ${DIAS[hoje]}</div>
+        <span class="tag-mut">${feitos}/${blocosHoje.length}</span>
+      </div>
+      ${blocosHoje.length? blocosHoje.map(b=>blocoHTML(b,dataHoje)).join('') :
+        `<div class="empty"><span class="big">🗓️</span>Nenhum bloco pra hoje.<br><button class="btn quiet" onclick="nav('plano')">Montar meu cronograma →</button></div>`}
+    </div>`;
+}
+function blocoHTML(b,data){
+  const m=materia(b.materiaId), on=b.feito&&b.feito[data];
+  return `<div class="item">
+    <button class="check ${on?'on':''}" onclick="toggleBloco('${b.id}','${data}')">${on?'✓':''}</button>
+    <div class="grow ${on?'strike':''}">
+      <div style="font-weight:600;font-size:15px">${esc(b.tema||(m?m.nome:'Estudo'))}</div>
+      <div class="tag-mut"><span class="dot" style="background:${m?m.cor:'var(--mut)'};display:inline-block;vertical-align:-1px"></span> ${m?esc(m.nome):''} · ${b.min} min</div>
+    </div>
+  </div>`;
+}
+function toggleBloco(id,data){
+  const b=S.blocos.find(x=>x.id===id); if(!b) return;
+  b.feito=b.feito||{};
+  b.feito[data]=!b.feito[data];
+  if(b.feito[data]) marcarAtividade();
+  salvar(); render();
+}
+
+/* ================= TELA: PLANO ================= */
+let diaSel=diaSemana();
+function renderPlano(){
+  const blocos=S.blocos.filter(b=>b.dia===diaSel);
+  $('#scr-plano').innerHTML=`
+    <div class="eyebrow">Cronograma</div>
+    <h1 class="h-page">Plano semanal</h1>
+    <div class="sub">Monte sua semana ideal — ela se repete toda semana e você marca o que fez.</div>
+
+    <div class="days">${DIAS.map((d,i)=>`<button class="${i===diaSel?'on':''}" onclick="diaSel=${i};render()">${d}</button>`).join('')}</div>
+
+    <div class="card">
+      ${blocos.length? blocos.map(b=>{
+        const m=materia(b.materiaId);
+        return `<div class="item">
+          <span class="dot" style="background:${m?m.cor:'var(--mut)'}"></span>
+          <div class="grow">
+            <div style="font-weight:600">${esc(b.tema||(m?m.nome:'Estudo'))}</div>
+            <div class="tag-mut">${m?esc(m.nome):''} · ${b.min} min</div>
+          </div>
+          <button class="btn quiet" onclick="removerBloco('${b.id}')">✕</button>
+        </div>`;
+      }).join('') : `<div class="empty"><span class="big">🌱</span>Dia livre — adicione um bloco de estudo.</div>`}
+      <button class="btn ghost" style="margin-top:12px" onclick="modalBloco()">+ Bloco em ${DIAS[diaSel]}</button>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Minhas matérias</div>
+      ${S.materias.map(m=>`<div class="item">
+        <span class="dot" style="background:${m.cor}"></span>
+        <div class="grow" style="font-weight:600">${esc(m.nome)}</div>
+        <button class="btn quiet" onclick="removerMateria('${m.id}')">✕</button>
+      </div>`).join('')||'<div class="empty">Cadastre as matérias do período — Anatomia, Bioquímica, Histologia…</div>'}
+      <button class="btn ghost" style="margin-top:12px" onclick="modalMateria()">+ Nova matéria</button>
+    </div>`;
+}
+function modalMateria(){
+  abrirModal(`<h3>Nova matéria</h3>
+    <label>Nome</label><input id="in-mat" placeholder="Ex.: Anatomia">
+    <label>Cor</label><div class="color-row" id="cores">${CORES.map((c,i)=>`<button style="background:${c}" class="${i===0?'on':''}" onclick="selCor(this)"></button>`).join('')}</div>
+    <button class="btn" style="margin-top:20px" onclick="salvarMateria()">Adicionar</button>`);
+  setTimeout(()=>$('#in-mat').focus(),100);
+}
+function selCor(el){ document.querySelectorAll('#cores button').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function salvarMateria(){
+  const nome=$('#in-mat').value.trim(); if(!nome) return toast('Dê um nome à matéria');
+  const cor=[...document.querySelectorAll('#cores button')].find(b=>b.classList.contains('on')).style.background;
+  S.materias.push({id:uid(),nome,cor});
+  salvar(); fecharModal(); render(); toast('Matéria criada 💪');
+}
+function removerMateria(id){
+  if(!confirm('Remover esta matéria? Blocos e decks ligados a ela ficam sem vínculo.')) return;
+  S.materias=S.materias.filter(m=>m.id!==id); salvar(); render();
+}
+function modalBloco(){
+  if(!S.materias.length){ toast('Crie uma matéria primeiro'); return modalMateria(); }
+  abrirModal(`<h3>Bloco de estudo · ${DIAS[diaSel]}</h3>
+    <label>Matéria</label><select id="in-bmat">${S.materias.map(m=>`<option value="${m.id}">${esc(m.nome)}</option>`).join('')}</select>
+    <label>Tema (opcional)</label><input id="in-btema" placeholder="Ex.: Membro superior — plexo braquial">
+    <label>Duração (min)</label><input id="in-bmin" type="number" value="50" min="5">
+    <button class="btn" style="margin-top:20px" onclick="salvarBloco()">Adicionar ao plano</button>`);
+}
+function salvarBloco(){
+  S.blocos.push({id:uid(), dia:diaSel, materiaId:$('#in-bmat').value, tema:$('#in-btema').value.trim(), min:Math.max(5,parseInt($('#in-bmin').value)||50), feito:{}});
+  salvar(); fecharModal(); render(); toast('Bloco adicionado');
+}
+function removerBloco(id){ S.blocos=S.blocos.filter(b=>b.id!==id); salvar(); render(); }
+
+/* ================= TELA: CARDS (flashcards + SM-2) ================= */
+let deckSel=null;
+function renderCards(){
+  const venc=cardsVencidos();
+  if(deckSel && !S.decks.find(d=>d.id===deckSel)) deckSel=null;
+  if(deckSel) return renderDeck(deckSel);
+  $('#scr-cards').innerHTML=`
+    <div class="eyebrow">Flashcards</div>
+    <h1 class="h-page">Revisão espaçada</h1>
+    <div class="sub">No estilo Anki: acertos afastam o card, erros trazem de volta.</div>
+
+    ${venc.length?`<div class="card"><div class="row">
+      <div class="grow"><div style="font-weight:700">Fila de hoje</div><div class="tag-mut">${venc.length} card${venc.length>1?'s':''} para revisar</div></div>
+      <button class="btn small" onclick="iniciarReview()">Revisar agora</button>
+    </div></div>`:''}
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">Meus baralhos</div>
+      ${S.decks.map(d=>{
+        const cs=S.cards.filter(c=>c.deckId===d.id);
+        const dv=cs.filter(c=>c.due<=hojeStr()).length;
+        return `<div class="item" style="cursor:pointer" onclick="deckSel='${d.id}';render()">
+          <div class="grow"><div style="font-weight:600">${esc(d.nome)}</div>
+          <div class="tag-mut">${cs.length} cards${dv?` · <b style="color:var(--brand)">${dv} vencidos</b>`:''}</div></div>
+          <span style="color:var(--mut)">›</span>
+        </div>`;
+      }).join('')||`<div class="empty"><span class="big">🃏</span>Crie seu primeiro baralho — por matéria ou por tema.</div>`}
+      <button class="btn ghost" style="margin-top:12px" onclick="modalDeck()">+ Novo baralho</button>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Dica de ouro 💡</div>
+      <p class="sub" style="margin-top:4px">Peça ao seu Claude flashcards prontos e cole aqui em segundos. O modelo de pedido está na aba <b>Mais → Estudar com Claude</b>.</p>
+    </div>`;
+}
+function renderDeck(id){
+  const d=S.decks.find(x=>x.id===id);
+  const cs=S.cards.filter(c=>c.deckId===id);
+  const dv=cs.filter(c=>c.due<=hojeStr()).length;
+  $('#scr-cards').innerHTML=`
+    <button class="btn quiet" style="padding-left:0" onclick="deckSel=null;render()">‹ Baralhos</button>
+    <h1 class="h-page">${esc(d.nome)}</h1>
+    <div class="sub">${cs.length} cards · ${dv} vencidos hoje</div>
+    ${dv?`<button class="btn" style="margin-top:14px" onclick="iniciarReview('${id}')">Revisar este baralho (${dv})</button>`:''}
+    <div class="row" style="margin-top:12px;gap:8px">
+      <button class="btn ghost" onclick="modalCard('${id}')">+ Card</button>
+      <button class="btn ghost" onclick="modalImport('${id}')">Colar em lote</button>
+      <button class="btn ghost" onclick="pedirApkg('${id}')">.apkg</button>
+    </div>
+    <input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
+    <div class="card">
+      ${cs.map(c=>`<div class="item">
+        <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
+        <div class="tag-mut">${esc(semImg(c.verso).slice(0,80))}${semImg(c.verso).length>80?'…':''}</div>
+        <div class="tag-mut" style="font-size:11px">próxima: ${c.due<=hojeStr()?'hoje':c.due.split('-').reverse().join('/')}</div></div>
+        <button class="btn quiet" onclick="removerCard('${c.id}')">✕</button>
+      </div>`).join('')||'<div class="empty">Baralho vazio. Adicione cards ou cole uma lista gerada pelo Claude.</div>'}
+    </div>
+    <button class="btn danger" onclick="removerDeck('${id}')">Excluir baralho</button>`;
+}
+function modalDeck(){
+  abrirModal(`<h3>Novo baralho</h3>
+    <label>Nome</label><input id="in-deck" placeholder="Ex.: Anatomia — Coração">
+    <button class="btn" style="margin-top:20px" onclick="salvarDeck()">Criar</button>`);
+  setTimeout(()=>$('#in-deck').focus(),100);
+}
+function salvarDeck(){
+  const nome=$('#in-deck').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
+  const d={id:uid(),nome}; S.decks.push(d); deckSel=d.id;
+  salvar(); fecharModal(); render();
+}
+function removerDeck(id){
+  if(!confirm('Excluir baralho e todos os seus cards?')) return;
+  S.decks=S.decks.filter(d=>d.id!==id); S.cards=S.cards.filter(c=>c.deckId!==id);
+  mediaApagarPrefixo(id+'/');
+  Object.keys(S.midias||{}).forEach(k=>{ if(k.startsWith(id+'/')) delete S.midias[k]; });
+  if(S.sync&&S.sync.codigo){
+    fetch('/api/media?c='+encodeURIComponent(S.sync.codigo)+'&prefix='+encodeURIComponent(id+'/'),{method:'DELETE'}).catch(()=>{});
+  }
+  deckSel=null; salvar(); render();
+}
+function novoCardObj(deckId,frente,verso){
+  return {id:uid(),deckId,frente,verso,ease:2.5,intervalo:0,reps:0,due:hojeStr()};
+}
+function modalCard(deckId){
+  abrirModal(`<h3>Novo card</h3>
+    <label>Frente (pergunta)</label><textarea id="in-fr" placeholder="Qual nervo inerva o deltoide?"></textarea>
+    <label>Verso (resposta)</label><textarea id="in-vs" placeholder="Nervo axilar (C5–C6)"></textarea>
+    <button class="btn" style="margin-top:20px" onclick="salvarCard('${deckId}')">Adicionar</button>`);
+}
+function salvarCard(deckId){
+  const f=$('#in-fr').value.trim(), v=$('#in-vs').value.trim();
+  if(!f||!v) return toast('Preencha frente e verso');
+  S.cards.push(novoCardObj(deckId,f,v));
+  salvar(); $('#in-fr').value=''; $('#in-vs').value=''; $('#in-fr').focus();
+  toast('Card criado — pode adicionar outro'); render();
+}
+function removerCard(id){ S.cards=S.cards.filter(c=>c.id!==id); salvar(); render(); }
+function modalImport(deckId){
+  abrirModal(`<h3>Colar em lote</h3>
+    <p class="sub" style="margin-top:4px">Cole uma linha por card no formato <b>frente ; verso</b>. É exatamente o formato que o prompt “Gerar flashcards” pede ao Claude.</p>
+    <textarea id="in-lote" style="min-height:160px" placeholder="Qual a artéria da cabeça do fêmur? ; Ramo da a. obturatória&#10;O que é pré-carga? ; Volume diastólico final..."></textarea>
+    <button class="btn" style="margin-top:16px" onclick="importarLote('${deckId}')">Importar</button>`);
+}
+function importarLote(deckId){
+  const linhas=$('#in-lote').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  let n=0;
+  linhas.forEach(l=>{
+    const i=l.indexOf(';'); if(i<1) return;
+    const f=l.slice(0,i).trim(), v=l.slice(i+1).trim();
+    if(f&&v){ S.cards.push(novoCardObj(deckId,f,v)); n++; }
+  });
+  salvar(); fecharModal(); render();
+  toast(n? n+' cards importados 🎉' : 'Nenhuma linha válida (use frente ; verso)');
+}
+
+/* ---------- Importar .apkg (Anki) ---------- */
+let apkgDeck=null;
+function pedirApkg(deckId){ apkgDeck=deckId; $('#file-apkg').click(); }
+function carregarScript(src){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=()=>rej(new Error('Falha ao carregar '+src));
+    document.head.appendChild(s);
+  });
+}
+async function libsApkg(){
+  if(!window.JSZip) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  if(!window.initSqlJs) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js');
+  if(!window._SQL) window._SQL=await initSqlJs({locateFile:f=>'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/'+f});
+  return window._SQL;
+}
+/* Mídias (imagens) ficam no IndexedDB — comporta muito mais que o localStorage */
+let _mdb=null;
+function mediaDB(){
+  return new Promise((res,rej)=>{
+    if(_mdb) return res(_mdb);
+    const rq=indexedDB.open('jaleco-media',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('m');
+    rq.onsuccess=()=>{_mdb=rq.result;res(_mdb)};
+    rq.onerror=()=>rej(rq.error);
+  });
+}
+async function mediaPut(k,blob){
+  const db=await mediaDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('m','readwrite');
+    tx.objectStore('m').put(blob,k);
+    tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+  });
+}
+async function mediaGet(k){
+  try{
+    const db=await mediaDB();
+    return await new Promise(res=>{
+      const rq=db.transaction('m').objectStore('m').get(k);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null);
+    });
+  }catch(e){ return null; }
+}
+async function mediaApagarPrefixo(pref){
+  try{
+    const db=await mediaDB();
+    const tx=db.transaction('m','readwrite'), st=tx.objectStore('m');
+    st.openCursor().onsuccess=e=>{
+      const c=e.target.result;
+      if(c){ if(String(c.key).startsWith(pref)) c.delete(); c.continue(); }
+    };
+  }catch(e){}
+}
+const MIMES={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',bmp:'image/bmp',avif:'image/avif'};
+function mimeDe(nome){ return MIMES[(nome.split('.').pop()||'').toLowerCase()]||'image/jpeg'; }
+
+/* Comprime para caber muitas imagens na cota gratuita (máx 1000px, JPEG ~82%) */
+async function comprimirImagem(blob){
+  const tipo=(blob.type||'').toLowerCase();
+  if(tipo.includes('gif')||tipo.includes('svg')) return blob; // preserva animação/vetor
+  try{
+    const bmp=await createImageBitmap(blob);
+    const MAX=1000, f=Math.min(1, MAX/Math.max(bmp.width,bmp.height));
+    const cv=document.createElement('canvas');
+    cv.width=Math.max(1,Math.round(bmp.width*f)); cv.height=Math.max(1,Math.round(bmp.height*f));
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height); // fundo p/ PNG transparente
+    ctx.drawImage(bmp,0,0,cv.width,cv.height);
+    const out=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.82));
+    return (out&&out.size<blob.size)?out:blob;
+  }catch(e){ return blob; }
+}
+async function uparMidia(k,blob){
+  if(!S.sync||!S.sync.codigo) return false;
+  try{
+    const r=await fetch('/api/media?c='+encodeURIComponent(S.sync.codigo)+'&k='+encodeURIComponent(k),{
+      method:'PUT', headers:{'Content-Type':blob.type||'application/octet-stream'}, body:blob
+    });
+    if(!r.ok) return false;
+    const j=await r.json();
+    if(j.url){ S.midias[k]=j.url; return true; }
+  }catch(e){}
+  return false;
+}
+async function mediaKeys(){
+  try{
+    const db=await mediaDB();
+    return await new Promise(res=>{
+      const ks=[], rq=db.transaction('m').objectStore('m').openCursor();
+      rq.onsuccess=e=>{const c=e.target.result; if(c){ks.push(String(c.key));c.continue();} else res(ks);};
+      rq.onerror=()=>res([]);
+    });
+  }catch(e){ return []; }
+}
+async function enviarImagensNuvem(){
+  if(!S.sync||!S.sync.codigo) return toast('Ative a sincronização primeiro');
+  const ks=await mediaKeys();
+  const pend=ks.filter(k=>!S.midias[k]);
+  if(!pend.length) return toast('Todas as imagens já estão na nuvem ✓');
+  toast('Enviando '+pend.length+' imagens…');
+  let n=0;
+  for(const k of pend){ const b=await mediaGet(k); if(b && await uparMidia(k,b)) n++; }
+  salvar();
+  toast(n===pend.length? n+' imagens na nuvem ☁️' : n+' de '+pend.length+' enviadas — tente de novo as restantes');
+}
+
+function limparHTML(html, deckId, usadas){
+  let t=String(html||'').replace(/\[sound:[^\]]*\]/g,'');
+  t=t.replace(/<img[^>]*src=["']?([^"'\s>]+)["']?[^>]*>/gi,(m,src)=>{
+    try{ src=decodeURIComponent(src); }catch(e){}
+    if(deckId&&usadas){ usadas.add(src); return '\n[[img:'+deckId+'/'+src+']]\n'; }
+    return '';
+  });
+  t=t.replace(/<br\s*\/?>/gi,'\n').replace(/<\/(div|p|li)>/gi,'\n');
+  const d=document.createElement('div'); d.innerHTML=t;
+  return (d.textContent||'').replace(/\n{3,}/g,'\n\n').trim();
+}
+/* Texto do card → HTML seguro com <img> resolvidas do IndexedDB */
+function faceHTML(t){
+  const keys=[];
+  let s=String(t).replace(/\[\[img:([^\]]+)\]\]/g,(m,k)=>{keys.push(k);return '\u0001'+(keys.length-1)+'\u0001';});
+  s=esc(s);
+  return s.replace(/\u0001(\d+)\u0001/g,(m,i)=>`<img class="fimg" data-mk="${esc(keys[i])}" alt="">`);
+}
+function semImg(t){ return String(t).replace(/\[\[img:[^\]]+\]\]/g,'🖼️').replace(/\s+/g,' ').trim(); }
+let urlsAtivas=[];
+async function hidratarImagens(root){
+  urlsAtivas.forEach(u=>URL.revokeObjectURL(u)); urlsAtivas=[];
+  for(const img of root.querySelectorAll('img[data-mk]')){
+    const k=img.dataset.mk;
+    const b=await mediaGet(k);
+    if(b){ const u=URL.createObjectURL(b); urlsAtivas.push(u); img.src=u; continue; }
+    const url=S.midias&&S.midias[k];
+    if(url){
+      img.src=url; // vem direto da nuvem
+      fetch(url).then(r=>r.ok?r.blob():null).then(bl=>{ if(bl) mediaPut(k,bl); }).catch(()=>{}); // e vira cache local
+    }
+    else img.replaceWith(Object.assign(document.createElement('div'),{className:'tag-mut',textContent:'[imagem não encontrada]'}));
+  }
+}
+const RX_CLOZE=/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g;
+function lerApkg(inp){
+  const f=inp.files[0]; inp.value='';
+  if(!f||!apkgDeck) return;
+  importarApkg(apkgDeck,f);
+}
+async function importarApkg(deckId,file){
+  toast('Lendo o .apkg…');
+  try{
+    const SQL=await libsApkg();
+    const zip=await JSZip.loadAsync(file);
+    const dbFile=zip.file('collection.anki21')||zip.file('collection.anki2');
+    if(!dbFile){
+      if(zip.file('collection.anki21b'))
+        alert('Este .apkg está no formato mais novo do Anki. Ao exportar, marque a opção “Support older Anki versions” (compatível com versões antigas) e tente de novo.');
+      else alert('Não encontrei um baralho Anki dentro deste arquivo.');
+      return;
+    }
+    const buf=await dbFile.async('uint8array');
+    const db=new SQL.Database(buf);
+    const res=db.exec('SELECT flds FROM notes');
+    db.close();
+    if(!res.length||!res[0].values.length) return toast('Nenhuma nota encontrada no arquivo');
+    const usadas=new Set();
+    let n=0, pulados=0;
+    res[0].values.forEach(([flds])=>{
+      const campos=String(flds).split('\u001f');
+      const c1=limparHTML(campos[0]||'',deckId,usadas), c2=limparHTML(campos[1]||'',deckId,usadas);
+      let frente,verso;
+      if(RX_CLOZE.test(c1)){ // nota cloze: frente com lacuna, verso revelado
+        frente=c1.replace(RX_CLOZE,'[…]');
+        verso=c1.replace(RX_CLOZE,'$1');
+      } else { frente=c1; verso=c2; }
+      RX_CLOZE.lastIndex=0;
+      if(frente&&verso){ S.cards.push(novoCardObj(deckId,frente,verso)); n++; }
+      else pulados++;
+    });
+    /* Mídias: o arquivo "media" mapeia números → nomes reais */
+    let imgs=0, naNuvem=0;
+    if(usadas.size){
+      toast('Importando imagens…');
+      let mapa={};
+      const mf=zip.file('media');
+      if(mf){ try{ mapa=JSON.parse(await mf.async('string')); }catch(e){} }
+      const nomeParaNum={};
+      Object.entries(mapa).forEach(([num,nome])=>nomeParaNum[nome]=num);
+      const temSync=!!(S.sync&&S.sync.codigo);
+      for(const nome of usadas){
+        const num=nomeParaNum[nome];
+        const arq=num!==undefined?zip.file(String(num)):null;
+        if(arq){
+          const u8=await arq.async('uint8array');
+          const blob=await comprimirImagem(new Blob([u8],{type:mimeDe(nome)}));
+          const k=deckId+'/'+nome;
+          await mediaPut(k, blob);
+          imgs++;
+          if(temSync && await uparMidia(k,blob)) naNuvem++;
+          if(imgs%10===0) toast(imgs+' imagens processadas…');
+        }
+      }
+    }
+    salvar(); render();
+    toast(n? `${n} cards${imgs?` e ${imgs} imagens`:''} importados${naNuvem?` (${naNuvem} na nuvem ☁️)`:''} 🎉` : 'Nenhum card válido para importar');
+  }catch(e){
+    console.error(e);
+    alert('Não consegui importar este arquivo. Verifique a internet (a leitura usa bibliotecas online) ou exporte de novo no Anki marcando “Support older Anki versions”.');
+  }
+}
+
+/* ---------- Sessão de revisão (SM-2) ---------- */
+let fila=[], cardAtual=null, mostrandoVerso=false, revStats=null;
+function iniciarReview(deckId){
+  const h=hojeStr();
+  fila=S.cards.filter(c=>c.due<=h && (!deckId||c.deckId===deckId));
+  if(!fila.length) return toast('Nada vencido por aqui ✨');
+  fila.sort(()=>Math.random()-.5);
+  revStats={total:0,acertos:0};
+  $('#review').classList.add('active');
+  proximoCard();
+}
+function proximoCard(){
+  if(!fila.length) return fimReview();
+  cardAtual=fila.shift(); mostrandoVerso=false;
+  $('#rv-count').textContent=(fila.length+1)+' na fila';
+  desenharCard();
+}
+function desenharCard(){
+  const texto=mostrandoVerso?cardAtual.verso:cardAtual.frente;
+  $('#rv-card').innerHTML=`<div style="width:100%"><div class="face-label">${mostrandoVerso?'Resposta':'Pergunta'}</div>${faceHTML(texto)}</div>`;
+  hidratarImagens($('#rv-card'));
+  $('#rv-actions').innerHTML= mostrandoVerso
+    ? `<div class="grade">
+        <button class="g0" onclick="avaliar(0)">Errei<small>&lt; 10 min</small></button>
+        <button class="g3" onclick="avaliar(3)">Difícil<small>${prevInt(3)}</small></button>
+        <button class="g4" onclick="avaliar(4)">Bom<small>${prevInt(4)}</small></button>
+        <button class="g5" onclick="avaliar(5)">Fácil<small>${prevInt(5)}</small></button>
+      </div>`
+    : `<button class="btn" onclick="virarCard()">Mostrar resposta</button>`;
+}
+function virarCard(){ mostrandoVerso=!mostrandoVerso; desenharCard(); }
+function calcSM2(c,q){
+  let {ease,intervalo,reps}=c;
+  if(q<3){ reps=0; intervalo=0; }
+  else{
+    if(reps===0) intervalo=1;
+    else if(reps===1) intervalo=6;
+    else intervalo=Math.round(intervalo*ease);
+    if(q===3) intervalo=Math.max(1,Math.round(intervalo*0.7));
+    if(q===5) intervalo=Math.round(intervalo*1.3);
+    reps++;
+    ease=Math.max(1.3, ease + (0.1-(5-q)*(0.08+(5-q)*0.02)));
+  }
+  return {ease,intervalo,reps};
+}
+function prevInt(q){
+  const r=calcSM2(cardAtual,q);
+  return r.intervalo===1?'1 dia':r.intervalo+' dias';
+}
+function avaliar(q){
+  const r=calcSM2(cardAtual,q);
+  Object.assign(cardAtual,r);
+  revStats.total++;
+  if(q>=4) revStats.acertos++;
+  if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); }
+  else cardAtual.due=addDias(hojeStr(),r.intervalo);
+  const h=hojeStr();
+  S.reviews[h]=S.reviews[h]||{total:0,acertos:0};
+  S.reviews[h].total++; if(q>=4) S.reviews[h].acertos++;
+  marcarAtividade(); salvar();
+  proximoCard();
+}
+function fimReview(){
+  $('#review').classList.remove('active');
+  const pct=revStats.total?Math.round(100*revStats.acertos/revStats.total):0;
+  toast(`Sessão concluída: ${revStats.total} cards · ${pct}% de retenção 🎉`);
+  render();
+}
+function fecharReview(){ $('#review').classList.remove('active'); render(); }
+
+/* ================= TELA: FOCO (pomodoro) ================= */
+let pomo={rodando:false, fase:'foco', restam:0, timer:null, materiaId:null};
+function fmtT(s){ return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function renderFoco(){
+  if(!pomo.rodando && pomo.restam===0) pomo.restam=S.pomo.foco*60;
+  const total=(pomo.fase==='foco'?S.pomo.foco:S.pomo.pausa)*60;
+  const R=100, C=2*Math.PI*R, pct=pomo.restam/total;
+  $('#scr-foco').innerHTML=`
+    <div class="eyebrow">Foco</div>
+    <h1 class="h-page">Pomodoro</h1>
+    <div class="sub">${S.pomo.foco} min de foco, ${S.pomo.pausa} de pausa. Cada ciclo completo entra na sua meta semanal.</div>
+
+    <div class="card" style="text-align:center;padding:26px 18px">
+      <div class="pomo-phase">${pomo.fase==='foco'?'● Foco':'☕ Pausa'}</div>
+      <div style="position:relative;width:230px;height:230px;margin:14px auto">
+        <svg class="ring" width="230" height="230" viewBox="0 0 230 230" style="position:absolute;inset:0">
+          <circle class="track" cx="115" cy="115" r="${R}" stroke-width="10"/>
+          <circle class="val" cx="115" cy="115" r="${R}" stroke-width="10" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/>
+        </svg>
+        <div class="pomo-time" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">${fmtT(pomo.restam)}</div>
+      </div>
+      <select id="pomo-mat" style="margin-bottom:14px" onchange="pomo.materiaId=this.value" ${pomo.rodando?'disabled':''}>
+        <option value="">Estudo geral</option>
+        ${S.materias.map(m=>`<option value="${m.id}" ${pomo.materiaId===m.id?'selected':''}>${esc(m.nome)}</option>`).join('')}
+      </select>
+      <div class="row" style="gap:10px">
+        <button class="btn" onclick="togglePomo()">${pomo.rodando?'Pausar':'Começar'}</button>
+        <button class="btn ghost" style="width:auto;padding:14px 18px" onclick="resetPomo()">↺</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px">Sessões de hoje</div>
+      ${S.sessoes.filter(s=>s.data===hojeStr()).map(s=>{
+        const m=materia(s.materiaId);
+        return `<div class="item"><span class="dot" style="background:${m?m.cor:'var(--mut)'}"></span>
+          <div class="grow" style="font-weight:600">${m?esc(m.nome):'Estudo geral'}</div>
+          <span class="tag-mut">${s.min} min</span></div>`;
+      }).join('')||'<div class="empty">Nenhuma sessão ainda. Bora pra primeira? 🔥</div>'}
+    </div>`;
+}
+function togglePomo(){
+  if(pomo.rodando){ clearInterval(pomo.timer); pomo.rodando=false; }
+  else{
+    pomo.rodando=true;
+    pomo.timer=setInterval(()=>{
+      pomo.restam--;
+      if(telaAtual==='foco'){
+        const el=document.querySelector('.pomo-time'); if(el) el.textContent=fmtT(pomo.restam);
+        const total=(pomo.fase==='foco'?S.pomo.foco:S.pomo.pausa)*60;
+        const c=document.querySelector('#scr-foco .val');
+        if(c){ const C=2*Math.PI*100; c.setAttribute('stroke-dashoffset', C*(1-pomo.restam/total)); }
+      }
+      if(pomo.restam<=0) fimFase();
+    },1000);
+  }
+  if(telaAtual==='foco') render();
+}
+function fimFase(){
+  clearInterval(pomo.timer); pomo.rodando=false;
+  bip();
+  if(pomo.fase==='foco'){
+    S.sessoes.push({data:hojeStr(), min:S.pomo.foco, materiaId:pomo.materiaId||null});
+    marcarAtividade(); salvar();
+    toast('Foco concluído! Merecida pausa ☕');
+    pomo.fase='pausa'; pomo.restam=S.pomo.pausa*60;
+  } else {
+    toast('Pausa encerrada — próximo round 💪');
+    pomo.fase='foco'; pomo.restam=S.pomo.foco*60;
+  }
+  if(telaAtual==='foco') render();
+}
+function resetPomo(){
+  clearInterval(pomo.timer);
+  pomo.rodando=false; pomo.fase='foco'; pomo.restam=S.pomo.foco*60;
+  render();
+}
+function bip(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    [0,0.2,0.4].forEach(t=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value=880; g.gain.setValueAtTime(0.15,ctx.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.15);
+      o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.16);
+    });
+  }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+}
+
+/* ================= TELA: MAIS (Claude, progresso, ajustes) ================= */
+const PROMPTS = [
+  {t:'Gerar flashcards', d:'Cria cards prontos para colar no Jaleco.',
+   p:tema=>`Gere 15 flashcards de estudo sobre "${tema}" para uma estudante do início da faculdade de Medicina.\nFormato OBRIGATÓRIO: uma linha por card, no padrão frente ; verso — sem numeração, sem markdown, sem texto extra antes ou depois.\nAs perguntas devem ser objetivas e as respostas curtas (1 a 2 frases), priorizando conceitos que caem em prova.`},
+  {t:'Explicar do zero', d:'Explicação clara, com analogias e resumo final.',
+   p:tema=>`Me explique "${tema}" como se eu estivesse no início da faculdade de Medicina. Comece pelo panorama geral, use analogias do dia a dia, destaque os erros mais comuns de quem está aprendendo e termine com um resumo em 5 tópicos que eu possa reler antes da prova.`},
+  {t:'Questões de prova', d:'Simulado com gabarito comentado.',
+   p:tema=>`Crie 10 questões de múltipla escolha (A–D) sobre "${tema}" no estilo de prova de faculdade de Medicina, do básico ao moderado. Mostre primeiro só as questões; depois que eu responder, revele o gabarito comentado explicando por que cada alternativa está certa ou errada.`},
+  {t:'Método Feynman', d:'Você explica, o Claude corrige.',
+   p:tema=>`Vamos usar o método Feynman com o tema "${tema}". Eu vou te explicar com minhas palavras, como se você fosse um leigo. Sua tarefa: apontar erros, imprecisões e lacunas na minha explicação, fazer perguntas que testem meu entendimento e me ajudar a refinar até ficar sólido. Pode começar me pedindo a explicação.`},
+  {t:'Caso clínico interativo', d:'Aprender aplicando, passo a passo.',
+   p:tema=>`Monte um caso clínico interativo simples envolvendo "${tema}", adequado para quem está no início de Medicina. Apresente o caso em etapas e me faça perguntas em cada uma (o que investigar, hipóteses, condutas básicas), dando feedback antes de avançar. Foque no raciocínio, não em condutas avançadas.`},
+  {t:'Resumo esquematizado', d:'Para revisar em 5 minutos.',
+   p:tema=>`Crie um resumo esquematizado de "${tema}" para revisão rápida: tópicos curtos, hierarquia clara, mnemônicos quando existirem, e uma tabela comparativa se fizer sentido. Máximo de 1 página.`},
+];
+let maisView='menu';
+function renderMais(){
+  if(maisView==='claude') return renderClaude();
+  if(maisView==='progresso') return renderProgresso();
+  if(maisView==='ajustes') return renderAjustes();
+  $('#scr-mais').innerHTML=`
+    <div class="eyebrow">Mais</div>
+    <h1 class="h-page">Seu cantinho</h1>
+    <div class="card" style="padding:6px 18px">
+      ${[['claude','🤖','Estudar com Claude','Prompts prontos para copiar'],
+         ['progresso','📈','Progresso','Horas, retenção e constância'],
+         ['ajustes','⚙️','Ajustes','Nome, tema, metas e backup']].map(([v,i,t,s])=>
+        `<div class="item" style="cursor:pointer" onclick="maisView='${v}';render()">
+          <span style="font-size:22px">${i}</span>
+          <div class="grow"><div style="font-weight:700">${t}</div><div class="tag-mut">${s}</div></div>
+          <span style="color:var(--mut)">›</span></div>`).join('')}
+    </div>`;
+}
+function renderClaude(){
+  $('#scr-mais').innerHTML=`
+    <button class="btn quiet" style="padding-left:0" onclick="maisView='menu';render()">‹ Voltar</button>
+    <h1 class="h-page">Estudar com Claude</h1>
+    <div class="sub">Digite o tema, copie o prompt e cole no <b>seu app do Claude</b>. Os flashcards gerados voltam pra cá pelo botão “Colar em lote”.</div>
+    <label>Tema de estudo</label>
+    <input id="in-tema" placeholder="Ex.: ciclo de Krebs, plexo braquial, potencial de ação…">
+    ${PROMPTS.map((pr,i)=>`<div class="card prompt-card">
+      <div style="font-weight:700">${pr.t}</div>
+      <p>${pr.d}</p>
+      <button class="btn ghost small" onclick="copiarPrompt(${i})">Copiar prompt</button>
+    </div>`).join('')}`;
+}
+function copiarPrompt(i){
+  const tema=($('#in-tema').value.trim())||'[tema]';
+  const txt=PROMPTS[i].p(tema);
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(
+    ()=>toast('Copiado! Cole no seu Claude 🤖'),
+    ()=>{ prompt('Copie o texto:', txt); }
+  );
+}
+function renderProgresso(){
+  const h=hojeStr();
+  const totalMin=S.sessoes.reduce((a,s)=>a+s.min,0);
+  const totalRev=Object.values(S.reviews).reduce((a,r)=>a+r.total,0);
+  const totalAc=Object.values(S.reviews).reduce((a,r)=>a+r.acertos,0);
+  const ret=totalRev?Math.round(100*totalAc/totalRev):0;
+  const barras=[];
+  for(let i=0;i<7;i++){
+    const d=dataDoDia(i);
+    barras.push({lbl:DIAS[i][0], min:S.sessoes.filter(s=>s.data===d).reduce((a,s)=>a+s.min,0), hoje:d===h});
+  }
+  const max=Math.max(30,...barras.map(b=>b.min));
+  const porMat=S.materias.map(m=>({m, min:S.sessoes.filter(s=>s.materiaId===m.id).reduce((a,s)=>a+s.min,0)})).filter(x=>x.min>0).sort((a,b)=>b.min-a.min);
+  $('#scr-mais').innerHTML=`
+    <button class="btn quiet" style="padding-left:0" onclick="maisView='menu';render()">‹ Voltar</button>
+    <h1 class="h-page">Progresso</h1>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">${streak()}</div><div class="l">dias seguidos 🔥</div></div>
+      <div class="stat"><div class="n">${(totalMin/60).toFixed(1).replace('.',',')}h</div><div class="l">de foco no total</div></div>
+      <div class="stat"><div class="n">${totalRev}</div><div class="l">cards revisados</div></div>
+      <div class="stat"><div class="n">${ret}%</div><div class="l">retenção geral</div></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Foco nesta semana</div>
+      <div class="bars">${barras.map(b=>`<div class="b">
+        <div class="fill" style="height:${Math.round(100*b.min/max)}%;${b.hoje?'':'opacity:.55'}"></div>
+        <div class="lbl">${b.lbl}</div></div>`).join('')}</div>
+    </div>
+    ${porMat.length?`<div class="card"><div style="font-weight:700;font-size:15px;margin-bottom:6px">Por matéria</div>
+      ${porMat.map(x=>`<div class="item"><span class="dot" style="background:${x.m.cor}"></span>
+        <div class="grow" style="font-weight:600">${esc(x.m.nome)}</div>
+        <span class="tag-mut">${(x.min/60).toFixed(1).replace('.',',')}h</span></div>`).join('')}</div>`:''}`;
+}
+function renderAjustes(){
+  $('#scr-mais').innerHTML=`
+    <button class="btn quiet" style="padding-left:0" onclick="maisView='menu';render()">‹ Voltar</button>
+    <h1 class="h-page">Ajustes</h1>
+    <div class="card">
+      <label style="margin-top:0">Seu nome</label><input id="aj-nome" value="${esc(S.nome)}">
+      <label>Meta semanal de foco (horas)</label><input id="aj-meta" type="number" value="${S.metaHoras}" min="1">
+      <label>Pomodoro — foco (min)</label><input id="aj-foco" type="number" value="${S.pomo.foco}" min="5">
+      <label>Pomodoro — pausa (min)</label><input id="aj-pausa" type="number" value="${S.pomo.pausa}" min="1">
+      <button class="btn" style="margin-top:18px" onclick="salvarAjustes()">Salvar</button>
+    </div>
+    <div class="card">
+      <label style="margin-top:0">Tema do app</label>
+      <div class="theme-row">${Object.entries(TEMAS).map(([k,t])=>`
+        <button class="${S.tema===k?'on':''}" onclick="S.tema='${k}';aplicarTema();salvar();render()">
+          ${t.nome}<div class="sw"><i style="background:${t.bg};border:1px solid ${t.line}"></i><i style="background:${t.brand}"></i><i style="background:${t.gold}"></i></div>
+        </button>`).join('')}</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Sincronizar entre aparelhos ☁️</div>
+      ${S.sync&&S.sync.codigo ? `
+        <p class="sub" style="margin:4px 0 10px">Ativa. Use este código no outro aparelho (Ajustes → "Já tenho um código"):</p>
+        <div class="row" style="gap:8px">
+          <input value="${esc(S.sync.codigo)}" readonly style="font-family:monospace;font-size:14px">
+          <button class="btn small ghost" onclick="copiarCodigo()">Copiar</button>
+        </div>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <button class="btn ghost" onclick="puxarSync(true).then(ok=>toast(ok?'Atualizado ✓':'Você já está com a versão mais recente'))">Sincronizar agora</button>
+          <button class="btn danger" style="width:auto" onclick="desativarSync()">Desativar</button>
+        </div>
+        <button class="btn ghost" style="margin-top:10px" onclick="enviarImagensNuvem()">Enviar imagens deste aparelho ☁️</button>
+        <p class="sub" style="margin-top:10px;font-size:12.5px">Imagens importadas com a sincronização ativa já sobem sozinhas. Use o botão acima para enviar as que foram importadas antes.</p>
+      ` : `
+        <p class="sub" style="margin:4px 0 12px">Guarde seus dados na nuvem e use no iPhone e no iPad ao mesmo tempo. Sem conta, sem senha — só um código secreto.</p>
+        <button class="btn" onclick="ativarSync()">Ativar neste aparelho</button>
+        <label>Já tenho um código</label>
+        <div class="row" style="gap:8px">
+          <input id="sync-cod" placeholder="jaleco-xxxx-xxxx-xxxx" autocapitalize="off">
+          <button class="btn small ghost" onclick="entrarComCodigo()">Entrar</button>
+        </div>
+      `}
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Backup dos dados</div>
+      <p class="sub" style="margin:4px 0 12px">Seus dados ficam só neste aparelho. Exporte de vez em quando por segurança, ou para levar para outro dispositivo.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" onclick="exportar()">Exportar</button>
+        <button class="btn ghost" onclick="importarBackup()">Importar</button>
+      </div>
+      <input type="file" id="file-imp" accept=".json" style="display:none" onchange="lerBackup(this)">
+    </div>
+    <button class="btn danger" onclick="apagarTudo()">Apagar todos os dados</button>`;
+}
+function salvarAjustes(){
+  S.nome=$('#aj-nome').value.trim()||'Gabi';
+  S.metaHoras=Math.max(1,parseInt($('#aj-meta').value)||15);
+  S.pomo.foco=Math.max(5,parseInt($('#aj-foco').value)||25);
+  S.pomo.pausa=Math.max(1,parseInt($('#aj-pausa').value)||5);
+  resetPomo(); salvar(); toast('Ajustes salvos ✓');
+}
+function exportar(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='jaleco-backup-'+hojeStr()+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importarBackup(){ $('#file-imp').click(); }
+function lerBackup(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+    S=Object.assign(PADRAO(), JSON.parse(r.result));
+    salvar(); aplicarTema(); render(); toast('Backup restaurado 🎉');
+  }catch(e){ toast('Arquivo inválido'); } };
+  r.readAsText(f);
+}
+function apagarTudo(){
+  if(!confirm('Apagar TUDO (matérias, cards, histórico)? Não dá pra desfazer.')) return;
+  if(!confirm('Certeza mesmo? Exporte um backup antes, se quiser.')) return;
+  localStorage.removeItem('jaleco2'); S=PADRAO(); aplicarTema(); nav('hoje');
+}
+
+/* ================= SINCRONIZAÇÃO ENTRE APARELHOS ================= */
+/* Estratégia: o estado inteiro (sem imagens) vai para /api/sync sob um código
+   secreto. Quem tem o timestamp mais novo vence (last-write-wins).           */
+let _pushTimer=null, _sincronizando=false;
+function agendarPush(){
+  if(!S.sync||!S.sync.codigo) return;
+  clearTimeout(_pushTimer);
+  _pushTimer=setTimeout(empurrarSync, 2500);
+}
+async function empurrarSync(){
+  if(!S.sync||!S.sync.codigo||_sincronizando) return;
+  try{
+    _sincronizando=true;
+    const r=await fetch('/api/sync?c='+encodeURIComponent(S.sync.codigo),{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({estado:S})
+    });
+    if(r.status===413) toast('Dados grandes demais para sincronizar — exporte um backup');
+  }catch(e){ /* offline: fica só local, tenta na próxima */ }
+  finally{ _sincronizando=false; }
+}
+async function puxarSync(forcar){
+  if(!S.sync||!S.sync.codigo) return false;
+  try{
+    const r=await fetch('/api/sync?c='+encodeURIComponent(S.sync.codigo));
+    if(!r.ok) return false;
+    const j=await r.json();
+    const remoto=j&&j.estado;
+    if(!remoto) return false;
+    if(forcar || (remoto.atualizadoEm||0)>(S.atualizadoEm||0)){
+      const codigo=S.sync.codigo;
+      S=Object.assign(PADRAO(), remoto);
+      S.sync=S.sync||{}; S.sync.codigo=codigo;
+      salvarLocal(); aplicarTema(); render();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function gerarCodigo(){
+  const p=()=>Math.random().toString(36).slice(2,6);
+  return 'jaleco-'+p()+'-'+p()+'-'+p();
+}
+function ativarSync(){
+  S.sync.codigo=gerarCodigo();
+  salvar(); render();
+  toast('Sincronização ativada ✓');
+}
+async function entrarComCodigo(){
+  const c=($('#sync-cod').value||'').trim().toLowerCase();
+  if(c.length<8) return toast('Código muito curto');
+  S.sync.codigo=c; salvarLocal();
+  toast('Buscando seus dados…');
+  const achou=await puxarSync(true);
+  if(achou) toast('Aparelho sincronizado 🎉');
+  else{ salvar(); toast('Código novo registrado — este aparelho virou a origem'); }
+  render();
+}
+function desativarSync(){
+  if(!confirm('Desativar a sincronização neste aparelho? Os dados locais continuam intactos.')) return;
+  S.sync.codigo=null; salvarLocal(); render();
+}
+function copiarCodigo(){
+  navigator.clipboard&&navigator.clipboard.writeText(S.sync.codigo);
+  toast('Código copiado');
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) puxarSync(); });
+
+
+/* ================= ONBOARDING ================= */
+function onboarding(){
+  abrirModal(`<h3 class="serif">Bem-vinda ao Jaleco 🩺</h3>
+    <p class="sub" style="margin-top:6px">Seu espaço de estudos da faculdade: cronograma, flashcards com revisão espaçada, foco e progresso — tudo em um lugar, do seu jeito.</p>
+    <label>Como você quer ser chamada?</label><input id="ob-nome" value="Gabi">
+    <label>Meta de foco por semana (horas)</label><input id="ob-meta" type="number" value="15" min="1">
+    <button class="btn" style="margin-top:20px" onclick="fimOnboarding()">Começar ✨</button>`);
+}
+function fimOnboarding(){
+  S.nome=$('#ob-nome').value.trim()||'Gabi';
+  S.metaHoras=Math.max(1,parseInt($('#ob-meta').value)||15);
+  S.onboarded=true;
+  if(!S.materias.length){
+    ['Anatomia','Bioquímica','Histologia','Fisiologia'].forEach((n,i)=>S.materias.push({id:uid(),nome:n,cor:CORES[i]}));
+  }
+  salvar(); fecharModal(); render();
+  toast('Tudo pronto. Bons estudos! 💪');
+}
+
+/* ================= INÍCIO ================= */
+carregar(); aplicarTema(); nav('hoje');
+if(!S.onboarded) onboarding();
+puxarSync(); // se a sincronização estiver ativa, busca a versão mais recente
+</script>
+</body>
+</html>
