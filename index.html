@@ -83,6 +83,8 @@ label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 
 .grade-cell{border-radius:9px;padding:6px 4px;font-size:10.5px;font-weight:700;color:#fff;text-align:center;line-height:1.2}
 .grade-vazio{border-radius:9px;padding:6px 4px;background:var(--line);opacity:.4;min-height:16px}
 .ev-passou{opacity:.45}
+.mes-barra{height:5px;border-radius:100px;background:var(--line);overflow:hidden;margin:10px 0 4px}
+.mes-barra i{display:block;height:100%;border-radius:100px;background:var(--brand);transition:width .3s}
 
 /* Nav */
 nav{
@@ -665,7 +667,7 @@ function toggleBloco(id,data){
 let diaSel=diaSemana();
 let planoView='semana';      // 'semana' | 'faculdade'
 let filtroDisc=null;         // null = todas; senão Set de ids
-let mostrarPassado=false;
+let mesSel=null;             // índice do mês exibido; null = mês de hoje
 function segHTML(){
   return `<div class="seg">
     <button class="${planoView==='semana'?'on':''}" onclick="planoView='semana';render()">Minha semana</button>
@@ -772,35 +774,75 @@ function gradeTableHTML(){
       }).join('')}</tr>`).join('')}
   </table>`;
 }
-const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-/* lista de eventos com um cabeçalho por mês */
-function timelineHTML(evs){
-  let mes=null;
-  return evs.map(ev=>{
-    const m=ev.data.slice(0,7);
-    const cab = m!==mes ? (mes=m, `<div class="tag-mut" style="font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:12px 0 2px">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</div>`) : '';
-    return cab + eventoHTML(ev);
-  }).join('');
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+/* meses do semestre, em ordem: ['2026-07', '2026-08', ...] */
+function mesesSemestre(){
+  const out=[], fimM=SEMESTRE.fim.slice(0,7);
+  let [y,m]=SEMESTRE.inicio.slice(0,7).split('-').map(Number);
+  let cur=SEMESTRE.inicio.slice(0,7);
+  while(cur<=fimM){
+    out.push(cur);
+    m++; if(m>12){ m=1; y++; }
+    cur=y+'-'+String(m).padStart(2,'0');
+  }
+  return out;
 }
+/* índice do mês em exibição — abre no mês de hoje, senão no 1º do semestre */
+function mesIdx(){
+  const meses=mesesSemestre();
+  if(mesSel===null){ const i=meses.indexOf(hojeStr().slice(0,7)); mesSel = i>=0?i:0; }
+  return Math.max(0, Math.min(mesSel, meses.length-1));
+}
+function irMes(delta){
+  const meses=mesesSemestre();
+  mesSel=Math.max(0, Math.min(mesIdx()+delta, meses.length-1));
+  render();
+}
+function nomeMes(m){ return MESES[+m.slice(5)-1]+' '+m.slice(0,4); }
 function eventoHTML(ev){
-  const st=statusEvento(ev), feito=!!S.semestre.feitos[ev.id];
+  const st=statusEvento(ev), feito=!!S.semestre.feitos[ev.id], feriado=ev.tipo==='feriado';
   const chip = st==='hoje'?'<span class="chip sm">hoje</span>'
-    : st==='futuro'?`<span class="tag-mut">em ${diasAte(ev.data)}d</span>`:'';
-  const dots=ev.disciplinas.map(id=>{const d=disciplina(id); return d?`<span class="dot" style="background:${d.cor};display:inline-block;vertical-align:-1px"></span>`:'';}).join(' ');
-  const tags=ev.disciplinas.map(id=>{const d=disciplina(id); return d?esc(d.tag):'';}).filter(Boolean).join(' · ');
-  return `<div class="item ${st==='passou'&&!feito?'ev-passou':''}">
-    ${ev.tipo==='feriado'?'<div style="width:26px;text-align:center">🌴</div>'
+    : st==='futuro'?`<span class="tag-mut" style="white-space:nowrap">em ${diasAte(ev.data)}d</span>`:'';
+  const tags=ev.disciplinas.map(id=>{const d=disciplina(id);
+    return d?`<span class="dot" style="background:${d.cor};display:inline-block;vertical-align:-1px"></span> ${esc(d.tag)}`:'';})
+    .filter(Boolean).join(' · ');
+  const dia=+ev.data.slice(8);
+  return `<div class="item ${st==='passou'&&!feito?'ev-passou':''}" ${st==='hoje'?'style="background:var(--brand-soft);border-radius:12px;padding-left:6px;padding-right:6px"':''}>
+    ${feriado?'<div style="width:26px;text-align:center;flex:none">🌴</div>'
       :`<button class="check ${feito?'on':''}" onclick="toggleFeitoEvento('${ev.id}')">${feito?'✓':''}</button>`}
-    <div class="grow ${feito?'strike':''}">
+    <div class="grow ${feito?'strike':''}" style="min-width:0">
+      <div class="tag-mut" style="font-weight:600">${dia} ${diaDaData(ev.data).toLowerCase()}${tags?' · '+tags:''}</div>
       <div style="font-weight:600;font-size:14px">${ICONE_TIPO[ev.tipo]||'📖'} ${esc(ev.desc)}</div>
-      <div class="tag-mut">${dots} ${tags} ${tags?'·':''} ${dataCurta(ev.data)} (${diaDaData(ev.data)})</div>
     </div>
     ${chip}
   </div>`;
 }
+/* card de navegação por mês — substitui a lista corrida do semestre inteiro */
+function mesCardHTML(){
+  const meses=mesesSemestre(), i=mesIdx(), m=meses[i];
+  const evs=eventosOrdenados().filter(e=>e.data.slice(0,7)===m).filter(eventoVisivel);
+  const marcaveis=evs.filter(e=>e.tipo!=='feriado');
+  const feitos=marcaveis.filter(e=>S.semestre.feitos[e.id]).length;
+  const pct=marcaveis.length? Math.round(feitos/marcaveis.length*100) : 0;
+
+  return `<div class="card">
+    <div class="row" style="gap:4px">
+      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px" ${i===0?'disabled style="opacity:.25;width:auto;padding:6px 12px;font-size:18px"':''} onclick="irMes(-1)">‹</button>
+      <div class="grow" style="text-align:center">
+        <div style="font-weight:700;font-size:15px">${nomeMes(m)}</div>
+        <div class="tag-mut">${marcaveis.length? feitos+' de '+marcaveis.length+' estudados' : 'sem aulas'}</div>
+      </div>
+      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px" ${i===meses.length-1?'disabled style="opacity:.25;width:auto;padding:6px 12px;font-size:18px"':''} onclick="irMes(1)">›</button>
+    </div>
+    ${marcaveis.length?`<div class="mes-barra"><i style="width:${pct}%"></i></div>`:''}
+    ${evs.length? evs.map(eventoHTML).join('')
+      : '<div class="empty"><span class="big">🌴</span>Nenhum evento neste mês.</div>'}
+    ${i!==meses.indexOf(hojeStr().slice(0,7)) && meses.indexOf(hojeStr().slice(0,7))>=0
+      ? `<button class="btn ghost" style="margin-top:12px" onclick="mesSel=null;render()">Voltar para hoje</button>`:''}
+  </div>`;
+}
 function renderPlanoFaculdade(){
-  const h=hojeStr(), todos=eventosOrdenados().filter(eventoVisivel);
-  const passados=todos.filter(e=>e.data<h), futuros=todos.filter(e=>e.data>=h);
+  const h=hojeStr();
   const sem=semanaDoSemestre(), prova=proximaProva();
 
   let banner;
@@ -854,21 +896,7 @@ function renderPlanoFaculdade(){
       ${filtroDisc?`<button class="btn quiet" style="margin-top:8px" onclick="filtroDisc=null;render()">Mostrar todas</button>`:''}
     </div>
 
-    <div class="card">
-      <div class="row" style="margin-bottom:4px">
-        <div class="grow" style="font-weight:700;font-size:15px">O que vem</div>
-        <span class="tag-mut">${futuros.length}</span>
-      </div>
-      ${futuros.length? timelineHTML(futuros)
-        : '<div class="empty"><span class="big">🎉</span>Nada mais no cronograma — semestre concluído!</div>'}
-    </div>
-
-    ${passados.length?`<div class="card">
-      <button class="btn quiet" onclick="mostrarPassado=${!mostrarPassado};render()">
-        ${mostrarPassado?'Esconder':'Ver'} ${passados.length} evento${passados.length>1?'s':''} anterior${passados.length>1?'es':''}
-      </button>
-      ${mostrarPassado? timelineHTML(passados) : ''}
-    </div>`:''}
+    ${mesCardHTML()}
 
     <div class="tag-mut" style="text-align:center;margin:6px 0 4px">
       Conforme o ${esc(SEMESTRE.fonte)}.<br>Datas podem mudar — confirme no SAVA/SIA.
