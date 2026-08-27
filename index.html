@@ -200,6 +200,9 @@ nav svg{width:23px;height:23px}
 
 <div class="toast" id="toast"></div>
 
+<input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
+<input type="file" id="file-txt" accept=".txt,.csv,.tsv" style="display:none" onchange="lerTxt(this)">
+
 <script>
 /* ================= ESTADO ================= */
 const CORES = ['#8E2D4B','#3E6B8C','#5B7B6C','#C08A2D','#7A5296','#B3453F','#2F7E8C','#8C6A4F'];
@@ -484,6 +487,11 @@ function renderCards(){
         </div>`;
       }).join('')||`<div class="empty"><span class="big">🃏</span>Crie seu primeiro baralho — por matéria ou por tema.</div>`}
       <button class="btn ghost" style="margin-top:12px" onclick="modalDeck()">+ Novo baralho</button>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn ghost small" onclick="iniciarImportar('lote')">Colar em lote</button>
+        <button class="btn ghost small" onclick="iniciarImportar('txt')">.txt</button>
+        <button class="btn ghost small" onclick="iniciarImportar('apkg')">.apkg (Anki)</button>
+      </div>
     </div>
 
     <div class="card">
@@ -506,8 +514,6 @@ function renderDeck(id){
       <button class="btn ghost" onclick="pedirTxt('${id}')">.txt</button>
       <button class="btn ghost" onclick="pedirApkg('${id}')">.apkg</button>
     </div>
-    <input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
-    <input type="file" id="file-txt" accept=".txt,.csv,.tsv" style="display:none" onchange="lerTxt(this)">
     <div class="card">
       ${cs.map(c=>`<div class="item">
         <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
@@ -528,6 +534,40 @@ function salvarDeck(){
   const nome=$('#in-deck').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
   const d={id:uid(),nome}; S.decks.push(d); deckSel=d.id;
   salvar(); fecharModal(); render();
+}
+/* ---------- Importar direto da lista de baralhos ---------- */
+let _importAlvo=null;
+function iniciarImportar(tipo){
+  _importAlvo=tipo;
+  if(!S.decks.length) return modalNovoBaralhoImport();
+  abrirModal(`<h3>Importar para qual baralho?</h3>
+    <div class="card" style="margin-top:10px;padding:6px 14px">
+      ${S.decks.map(d=>`<div class="item" style="cursor:pointer" onclick="prosseguirImportar('${d.id}')">
+        <div class="grow" style="font-weight:600">${esc(d.nome)}</div>
+        <span style="color:var(--mut)">›</span>
+      </div>`).join('')}
+    </div>
+    <button class="btn ghost" style="margin-top:14px" onclick="modalNovoBaralhoImport()">+ Criar novo baralho</button>`);
+}
+function modalNovoBaralhoImport(){
+  abrirModal(`<h3>Novo baralho</h3>
+    <label>Nome</label><input id="in-deck-imp" placeholder="Ex.: Anatomia — Coração">
+    <button class="btn" style="margin-top:20px" onclick="criarBaralhoEImportar()">Criar e continuar</button>`);
+  setTimeout(()=>$('#in-deck-imp').focus(),100);
+}
+function criarBaralhoEImportar(){
+  const nome=$('#in-deck-imp').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
+  const d={id:uid(),nome}; S.decks.push(d);
+  salvar();
+  prosseguirImportar(d.id);
+}
+function prosseguirImportar(deckId){
+  const tipo=_importAlvo;
+  fecharModal();
+  deckSel=deckId; render();
+  if(tipo==='lote') modalImport(deckId);
+  else if(tipo==='txt') pedirTxt(deckId);
+  else if(tipo==='apkg') pedirApkg(deckId);
 }
 function removerDeck(id){
   if(!confirm('Excluir baralho e todos os seus cards?')) return;
