@@ -483,7 +483,7 @@ function renderCards(){
         return `<div class="item" style="cursor:pointer" onclick="deckSel='${d.id}';render()">
           <div class="grow"><div style="font-weight:600">${esc(d.nome)}</div>
           <div class="tag-mut">${cs.length} cards${dv?` · <b style="color:var(--brand)">${dv} vencidos</b>`:''}</div></div>
-          <span style="color:var(--mut)">›</span>
+          <button class="btn quiet" onclick="event.stopPropagation();removerDeck('${d.id}')">✕</button>
         </div>`;
       }).join('')||`<div class="empty"><span class="big">🃏</span>Crie seu primeiro baralho — por matéria ou por tema.</div>`}
       <button class="btn ghost" style="margin-top:12px" onclick="modalDeck()">+ Novo baralho</button>
@@ -499,7 +499,31 @@ function renderCards(){
       <p class="sub" style="margin-top:4px">Peça ao seu Claude flashcards prontos e cole aqui em segundos. O modelo de pedido está na aba <b>Mais → Estudar com Claude</b>.</p>
     </div>`;
 }
+let buscaCard='', _deckAbertoAnterior=null;
+function normBusca(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function cardsFiltrados(id){
+  const cs=S.cards.filter(c=>c.deckId===id);
+  const termo=normBusca(buscaCard);
+  if(!termo) return cs;
+  return cs.filter(c=>normBusca(semImg(c.frente)).includes(termo)||normBusca(semImg(c.verso)).includes(termo));
+}
+function listaCardsHTML(id){
+  const filtrados=cardsFiltrados(id);
+  if(!filtrados.length){
+    return buscaCard.trim()
+      ? `<div class="empty">Nenhum card encontrado para "${esc(buscaCard)}".</div>`
+      : '<div class="empty">Baralho vazio. Adicione cards ou cole uma lista gerada pelo Claude.</div>';
+  }
+  return filtrados.map(c=>`<div class="item">
+    <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
+    <div class="tag-mut">${esc(semImg(c.verso).slice(0,80))}${semImg(c.verso).length>80?'…':''}</div>
+    <div class="tag-mut" style="font-size:11px">próxima: ${c.due<=hojeStr()?'hoje':c.due.split('-').reverse().join('/')}</div></div>
+    <button class="btn quiet" onclick="removerCard('${c.id}')">✕</button>
+  </div>`).join('');
+}
+function renderListaCards(id){ $('#lista-cards').innerHTML=listaCardsHTML(id); }
 function renderDeck(id){
+  if(id!==_deckAbertoAnterior){ buscaCard=''; _deckAbertoAnterior=id; }
   const d=S.decks.find(x=>x.id===id);
   const cs=S.cards.filter(c=>c.deckId===id);
   const dv=cs.filter(c=>c.due<=hojeStr()).length;
@@ -514,14 +538,8 @@ function renderDeck(id){
       <button class="btn ghost" onclick="pedirTxt('${id}')">.txt</button>
       <button class="btn ghost" onclick="pedirApkg('${id}')">.apkg</button>
     </div>
-    <div class="card">
-      ${cs.map(c=>`<div class="item">
-        <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
-        <div class="tag-mut">${esc(semImg(c.verso).slice(0,80))}${semImg(c.verso).length>80?'…':''}</div>
-        <div class="tag-mut" style="font-size:11px">próxima: ${c.due<=hojeStr()?'hoje':c.due.split('-').reverse().join('/')}</div></div>
-        <button class="btn quiet" onclick="removerCard('${c.id}')">✕</button>
-      </div>`).join('')||'<div class="empty">Baralho vazio. Adicione cards ou cole uma lista gerada pelo Claude.</div>'}
-    </div>
+    ${cs.length>4?`<input id="in-buscaCard" placeholder="Buscar nos cards deste baralho..." value="${esc(buscaCard)}" style="margin-top:14px" oninput="buscaCard=this.value;renderListaCards('${id}')">`:''}
+    <div class="card" id="lista-cards">${listaCardsHTML(id)}</div>
     <button class="btn danger" onclick="removerDeck('${id}')">Excluir baralho</button>`;
 }
 function modalDeck(){
@@ -856,13 +874,14 @@ async function importarApkg(deckId,file){
 }
 
 /* ---------- Sessão de revisão (SM-2) ---------- */
-let fila=[], cardAtual=null, mostrandoVerso=false, revStats=null;
+let fila=[], cardAtual=null, mostrandoVerso=false, revStats=null, historico=[];
 function iniciarReview(deckId){
   const h=hojeStr();
   fila=S.cards.filter(c=>c.due<=h && (!deckId||c.deckId===deckId));
   if(!fila.length) return toast('Nada vencido por aqui ✨');
   fila.sort(()=>Math.random()-.5);
   revStats={total:0,acertos:0};
+  historico=[];
   $('#review').classList.add('active');
   proximoCard();
 }
@@ -890,7 +909,10 @@ function desenharCard(){
         <button class="g5" onclick="avaliar(5)">Fácil<small>${prevInt(5)}</small></button>
       </div>`
     : `<button class="btn" onclick="virarCard()">Mostrar resposta</button>`)
-    + `<button class="btn quiet" style="margin-top:8px" onclick="pedirExplicacao()">🤖 Pedir explicação</button>`;
+    + `<div class="row" style="margin-top:8px;gap:8px">
+         <button class="btn quiet" style="flex:1" onclick="pedirExplicacao()">🤖 Pedir explicação</button>
+         ${historico.length?`<button class="btn quiet" style="flex:1" onclick="desfazerUltima()">↩️ Desfazer</button>`:''}
+       </div>`;
 }
 function virarCard(){ mostrandoVerso=!mostrandoVerso; desenharCard(); }
 function pedirExplicacao(){
@@ -923,17 +945,46 @@ function prevInt(q){
   return r.intervalo===1?'1 dia':r.intervalo+' dias';
 }
 function avaliar(q){
+  const estadoAnterior={ease:cardAtual.ease, intervalo:cardAtual.intervalo, reps:cardAtual.reps, due:cardAtual.due};
+  const cardId=cardAtual.id;
   const r=calcSM2(cardAtual,q);
   Object.assign(cardAtual,r);
   revStats.total++;
   if(q>=4) revStats.acertos++;
-  if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); }
+  let requeued=false;
+  if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); requeued=true; }
   else cardAtual.due=addDias(hojeStr(),r.intervalo);
   const h=hojeStr();
   S.reviews[h]=S.reviews[h]||{total:0,acertos:0};
   S.reviews[h].total++; if(q>=4) S.reviews[h].acertos++;
   marcarAtividade(); salvar();
+  historico.push({cardId, estadoAnterior, q, requeued, diaReview:h});
   proximoCard();
+}
+function desfazerUltima(){
+  if(!historico.length) return toast('Nada para desfazer');
+  const h=historico.pop();
+  const card=S.cards.find(c=>c.id===h.cardId);
+  if(!card){ toast('Esse card não existe mais'); return desenharCard(); }
+  if(h.requeued){
+    const idx=fila.indexOf(card);
+    if(idx>=0) fila.splice(idx,1);
+  }
+  Object.assign(card, h.estadoAnterior);
+  revStats.total=Math.max(0,revStats.total-1);
+  if(h.q>=4) revStats.acertos=Math.max(0,revStats.acertos-1);
+  const rd=S.reviews[h.diaReview];
+  if(rd){
+    rd.total=Math.max(0,rd.total-1);
+    if(h.q>=4) rd.acertos=Math.max(0,rd.acertos-1);
+    if(rd.total===0) delete S.reviews[h.diaReview];
+  }
+  salvar();
+  if(cardAtual) fila.unshift(cardAtual);
+  cardAtual=card; mostrandoVerso=true;
+  $('#rv-count').textContent=(fila.length+1)+' na fila';
+  desenharCard();
+  toast('Desfeito — avalie de novo');
 }
 function fimReview(){
   $('#review').classList.remove('active');
