@@ -503,9 +503,11 @@ function renderDeck(id){
     <div class="row" style="margin-top:12px;gap:8px">
       <button class="btn ghost" onclick="modalCard('${id}')">+ Card</button>
       <button class="btn ghost" onclick="modalImport('${id}')">Colar em lote</button>
+      <button class="btn ghost" onclick="pedirTxt('${id}')">.txt</button>
       <button class="btn ghost" onclick="pedirApkg('${id}')">.apkg</button>
     </div>
     <input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
+    <input type="file" id="file-txt" accept=".txt,.csv,.tsv" style="display:none" onchange="lerTxt(this)">
     <div class="card">
       ${cs.map(c=>`<div class="item">
         <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
@@ -556,20 +558,51 @@ function salvarCard(deckId){
 function removerCard(id){ S.cards=S.cards.filter(c=>c.id!==id); salvar(); render(); }
 function modalImport(deckId){
   abrirModal(`<h3>Colar em lote</h3>
-    <p class="sub" style="margin-top:4px">Cole uma linha por card no formato <b>frente ; verso</b>. É exatamente o formato que o prompt “Gerar flashcards” pede ao Claude.</p>
+    <p class="sub" style="margin-top:4px">Cole uma linha por card no formato <b>frente ; verso</b> (ou separado por tab). É exatamente o formato que o prompt “Gerar flashcards” pede ao Claude.</p>
     <textarea id="in-lote" style="min-height:160px" placeholder="Qual a artéria da cabeça do fêmur? ; Ramo da a. obturatória&#10;O que é pré-carga? ; Volume diastólico final..."></textarea>
     <button class="btn" style="margin-top:16px" onclick="importarLote('${deckId}')">Importar</button>`);
 }
+/* Aceita "frente ; verso" (nosso formato) ou "frente<TAB>verso" (exportação do Anki em texto simples) */
+function parseLinhaCard(l){
+  l=String(l).trim();
+  if(!l||l.startsWith('#')) return null;
+  if(l.includes('\t')){
+    const p=l.split('\t');
+    return [p[0].trim(), p.slice(1).join(' ').trim()];
+  }
+  const i=l.indexOf(';'); if(i<1) return null;
+  return [l.slice(0,i).trim(), l.slice(i+1).trim()];
+}
 function importarLote(deckId){
-  const linhas=$('#in-lote').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const linhas=$('#in-lote').value.split('\n');
   let n=0;
   linhas.forEach(l=>{
-    const i=l.indexOf(';'); if(i<1) return;
-    const f=l.slice(0,i).trim(), v=l.slice(i+1).trim();
-    if(f&&v){ S.cards.push(novoCardObj(deckId,f,v)); n++; }
+    const par=parseLinhaCard(l);
+    if(par&&par[0]&&par[1]){ S.cards.push(novoCardObj(deckId,par[0],par[1])); n++; }
   });
   salvar(); fecharModal(); render();
   toast(n? n+' cards importados 🎉' : 'Nenhuma linha válida (use frente ; verso)');
+}
+/* ---------- Importar arquivo .txt/.csv/.tsv ---------- */
+let txtDeck=null;
+function pedirTxt(deckId){ txtDeck=deckId; $('#file-txt').click(); }
+function lerTxt(inp){
+  const f=inp.files[0]; inp.value='';
+  if(!f||!txtDeck) return;
+  const r=new FileReader();
+  r.onload=()=>importarTxt(txtDeck, String(r.result||''));
+  r.onerror=()=>toast('Não consegui ler o arquivo');
+  r.readAsText(f,'utf-8');
+}
+function importarTxt(deckId, texto){
+  const linhas=texto.split(/\r?\n/);
+  let n=0;
+  linhas.forEach(l=>{
+    const par=parseLinhaCard(l);
+    if(par&&par[0]&&par[1]){ S.cards.push(novoCardObj(deckId,par[0],par[1])); n++; }
+  });
+  salvar(); render();
+  toast(n? n+' cards importados do arquivo 🎉' : 'Nenhuma linha válida (use frente ; verso ou frente + tab + verso)');
 }
 
 /* ---------- Importar .apkg (Anki) ---------- */
