@@ -187,7 +187,7 @@ nav svg{width:23px;height:23px}
   <div class="row">
     <button class="btn small ghost" onclick="fecharReview()">Sair</button>
     <div class="grow" style="text-align:center;font-weight:700" id="rv-count"></div>
-    <div style="width:64px"></div>
+    <button class="btn small ghost" onclick="pularCard()">Pular</button>
   </div>
   <div class="fcard" id="rv-card" onclick="virarCard()"></div>
   <div id="rv-actions"></div>
@@ -872,6 +872,12 @@ function proximoCard(){
   $('#rv-count').textContent=(fila.length+1)+' na fila';
   desenharCard();
 }
+function pularCard(){
+  if(!cardAtual) return;
+  if(!fila.length) return toast('Só sobrou esse card por aqui');
+  fila.push(cardAtual); // manda pro fim da fila de hoje, sem mexer no agendamento — pra revisar o que já estudou primeiro
+  proximoCard();
+}
 function desenharCard(){
   const texto=mostrandoVerso?cardAtual.verso:cardAtual.frente;
   $('#rv-card').innerHTML=`<div style="width:100%"><div class="face-label">${mostrandoVerso?'Resposta':'Pergunta'}</div>${faceHTML(texto)}</div>`;
@@ -890,11 +896,13 @@ function calcSM2(c,q){
   let {ease,intervalo,reps}=c;
   if(q<3){ reps=0; intervalo=0; }
   else{
-    if(reps===0) intervalo=1;
+    if(reps===0) intervalo = (q===5) ? 4 : 1; // graduação (1ª vez): Difícil/Bom = 1 dia, Fácil = 4 dias — como o Anki
     else if(reps===1) intervalo=6;
     else intervalo=Math.round(intervalo*ease);
-    if(q===3) intervalo=Math.max(1,Math.round(intervalo*0.7));
-    if(q===5) intervalo=Math.round(intervalo*1.3);
+    if(reps>0){ // o ajuste fino de Difícil/Fácil só entra depois da graduação
+      if(q===3) intervalo=Math.max(1,Math.round(intervalo*0.7));
+      if(q===5) intervalo=Math.round(intervalo*1.3);
+    }
     reps++;
     ease=Math.max(1.3, ease + (0.1-(5-q)*(0.08+(5-q)*0.02)));
   }
