@@ -82,7 +82,13 @@ label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 
 .grade-hora{font-size:10.5px;color:var(--mut);font-weight:600;white-space:nowrap;text-align:right;padding-right:4px;width:auto!important}
 .grade-cell{border-radius:9px;padding:6px 4px;font-size:10.5px;font-weight:700;color:#fff;text-align:center;line-height:1.2}
 .grade-vazio{border-radius:9px;padding:6px 4px;background:var(--line);opacity:.4;min-height:16px}
-.ev-passou{opacity:.45}
+/* estudado = some do caminho; atrasado = chama atenção */
+.ev-feito{opacity:.5}
+.ev-feito .grow>div:last-child{text-decoration:line-through}
+.ev-atraso{background:rgba(201,162,39,.13);border-radius:12px;padding-left:8px;padding-right:8px}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+/* texto em --ink pra continuar legível também no tema Noite */
+.chip.alerta{background:rgba(201,162,39,.22);color:var(--ink)}
 .mes-barra{height:5px;border-radius:100px;background:var(--line);overflow:hidden;margin:10px 0 4px}
 .mes-barra i{display:block;height:100%;border-radius:100px;background:var(--brand);transition:width .3s}
 
@@ -253,6 +259,12 @@ const SEMESTRE = {
   inicio:'2026-07-28',
   fim:'2026-12-08',
   fonte:'Manual do Aluno S3 (M51) 2026.2',
+
+  /* Ela entrou por transferência com o semestre já em andamento. As aulas
+     anteriores a esta data não contam como estudo atrasado dela — ficam numa
+     seção à parte, ainda consultáveis (o conteúdo cai na prova do mesmo jeito).
+     Se ela começar o semestre desde o primeiro dia, deixe `chegada:null`. */
+  chegada:'2026-08-27',
 
   disciplinas:[
     {id:'para', tag:'Parasito',  nome:'Parasitologia e Imunologia Médica',             cor:'#8E2D4B', coord:'Valter Menezes Barbosa Filho'},
@@ -440,7 +452,7 @@ const FRASES = [
 
 let S = null;
 const PADRAO = () => ({
-  nome:'Gabi', tema:'vinho', metaHoras:15,
+  nome:'Gabi', tema:'vinho',
   pomo:{foco:25, pausa:5},
   materias:[], blocos:[], decks:[], cards:[],
   sessoes:[], reviews:{}, atividade:{},
@@ -481,6 +493,15 @@ function diasAte(iso){
   const [y1,m1,d1]=hojeStr().split('-').map(Number), [y2,m2,d2]=iso.split('-').map(Number);
   return Math.round((new Date(y2,m2-1,d2) - new Date(y1,m1-1,d1))/86400000);
 }
+/* Dois eixos independentes, de propósito:
+   - a AULA aconteceu ou não  -> fato da faculdade, decidido pela data
+   - ela ESTUDOU ou não       -> ato dela em casa, decidido pelo checkbox
+   O que passou e ela não estudou é "atrasado" (o que mais importa mostrar);
+   o que é anterior à chegada dela não é cobrado, mas continua consultável. */
+function anteriorAChegada(ev){ return !!SEMESTRE.chegada && ev.data<SEMESTRE.chegada; }
+function marcavel(ev){ return ev.tipo!=='feriado'; }
+function estudado(ev){ return !!S.semestre.feitos[ev.id]; }
+function atrasado(ev){ return marcavel(ev) && !anteriorAChegada(ev) && ev.data<hojeStr() && !estudado(ev); }
 function statusEvento(ev){ const h=hojeStr(); return ev.data<h?'passou':ev.data===h?'hoje':'futuro'; }
 function eventosOrdenados(){ return [...SEMESTRE.eventos].sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0); }
 function eventosDoDia(iso){ return SEMESTRE.eventos.filter(e=>e.data===iso); }
@@ -509,10 +530,6 @@ function streak(){
   return n;
 }
 function cardsVencidos(){ const h=hojeStr(); return S.cards.filter(c=>c.due<=h); }
-function minutosSemana(){
-  const ini=dataDoDia(0), fim=dataDoDia(6);
-  return S.sessoes.filter(s=>s.data>=ini&&s.data<=fim).reduce((a,s)=>a+s.min,0);
-}
 function aplicarTema(){
   const t = TEMAS[S.tema]||TEMAS.vinho, r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--card',t.card); r.setProperty('--ink',t.ink);
@@ -564,8 +581,6 @@ function saudacao(){
 }
 function renderHoje(){
   const st=streak(), venc=cardsVencidos().length;
-  const min=minutosSemana(), meta=S.metaHoras*60, pct=Math.min(1,meta?min/meta:0);
-  const R=34, C=2*Math.PI*R;
   const hoje=diaSemana(), dataHoje=hojeStr();
   const blocosHoje=S.blocos.filter(b=>b.dia===hoje);
   const feitos=blocosHoje.filter(b=>b.feito&&b.feito[dataHoje]).length;
@@ -585,20 +600,6 @@ function renderHoje(){
         <div class="chip">🔥 ${st} ${st===1?'dia':'dias'}</div>
       </div>
       <div class="ecg-wrap">${ecgSVG()}</div>
-    </div>
-
-    <div class="card">
-      <div class="row">
-        <svg class="ring" width="86" height="86" viewBox="0 0 86 86">
-          <circle class="track" cx="43" cy="43" r="${R}" stroke-width="9"/>
-          <circle class="val" cx="43" cy="43" r="${R}" stroke-width="9" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/>
-        </svg>
-        <div class="grow">
-          <div style="font-weight:700;font-size:15px">Meta da semana</div>
-          <div class="tag-mut">${(min/60).toFixed(1).replace('.',',')}h de ${S.metaHoras}h de foco</div>
-          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--brand);margin-top:2px">${Math.round(pct*100)}%</div>
-        </div>
-      </div>
     </div>
 
     <div class="card" onclick="nav('cards')" style="cursor:pointer">
@@ -643,6 +644,8 @@ function cardFaculdadeHTML(){
     <div style="font-size:13.5px;margin-bottom:${temas.length||dProva!==null?'6px':'0'}">${linha}</div>
     ${temas.map(e=>`<div class="tag-mut" style="margin-top:2px">${ICONE_TIPO[e.tipo]||'📖'} ${esc(e.desc)}</div>`).join('')}
     ${prova&&dProva<=14?`<div style="margin-top:8px;font-size:13px;font-weight:600;color:var(--brand)">📝 ${dProva===0?'Prova hoje':dProva===1?'Prova amanhã':'Próxima prova em '+dProva+' dias'} · ${esc(prova.desc)}</div>`:''}
+    ${(()=>{const n=SEMESTRE.eventos.filter(atrasado).length;
+      return n?`<div class="tag-mut" style="margin-top:8px">⚠ ${n} aula${n>1?'s':''} pra estudar em atraso</div>`:'';})()}
   </div>`;
 }
 function blocoHTML(b,data){
@@ -668,6 +671,7 @@ let diaSel=diaSemana();
 let planoView='semana';      // 'semana' | 'faculdade'
 let filtroDisc=null;         // null = todas; senão Set de ids
 let mesSel=null;             // índice do mês exibido; null = mês de hoje
+let verAntes=false;          // seção "antes de eu chegar" aberta?
 function segHTML(){
   return `<div class="seg">
     <button class="${planoView==='semana'?'on':''}" onclick="planoView='semana';render()">Minha semana</button>
@@ -800,17 +804,21 @@ function irMes(delta){
 }
 function nomeMes(m){ return MESES[+m.slice(5)-1]+' '+m.slice(0,4); }
 function eventoHTML(ev){
-  const st=statusEvento(ev), feito=!!S.semestre.feitos[ev.id], feriado=ev.tipo==='feriado';
-  const chip = st==='hoje'?'<span class="chip sm">hoje</span>'
+  const st=statusEvento(ev), feito=estudado(ev), feriado=ev.tipo==='feriado', atr=atrasado(ev);
+  const chip = feito?'<span class="chip sm ok">estudei</span>'
+    : atr?'<span class="chip sm alerta">a estudar</span>'
+    : st==='hoje'?'<span class="chip sm">hoje</span>'
     : st==='futuro'?`<span class="tag-mut" style="white-space:nowrap">em ${diasAte(ev.data)}d</span>`:'';
   const tags=ev.disciplinas.map(id=>{const d=disciplina(id);
     return d?`<span class="dot" style="background:${d.cor};display:inline-block;vertical-align:-1px"></span> ${esc(d.tag)}`:'';})
     .filter(Boolean).join(' · ');
   const dia=+ev.data.slice(8);
-  return `<div class="item ${st==='passou'&&!feito?'ev-passou':''}" ${st==='hoje'?'style="background:var(--brand-soft);border-radius:12px;padding-left:6px;padding-right:6px"':''}>
+  const cls = feito?'ev-feito' : atr?'ev-atraso' : '';
+  const destaque = st==='hoje'&&!feito ? 'style="background:var(--brand-soft);border-radius:12px;padding-left:8px;padding-right:8px"' : '';
+  return `<div class="item ${cls}" ${destaque}>
     ${feriado?'<div style="width:26px;text-align:center;flex:none">🌴</div>'
-      :`<button class="check ${feito?'on':''}" onclick="toggleFeitoEvento('${ev.id}')">${feito?'✓':''}</button>`}
-    <div class="grow ${feito?'strike':''}" style="min-width:0">
+      :`<button class="check ${feito?'on':''}" onclick="toggleFeitoEvento('${ev.id}')" title="marcar que eu estudei">${feito?'✓':''}</button>`}
+    <div class="grow" style="min-width:0">
       <div class="tag-mut" style="font-weight:600">${dia} ${diaDaData(ev.data).toLowerCase()}${tags?' · '+tags:''}</div>
       <div style="font-weight:600;font-size:14px">${ICONE_TIPO[ev.tipo]||'📖'} ${esc(ev.desc)}</div>
     </div>
@@ -820,23 +828,38 @@ function eventoHTML(ev){
 /* card de navegação por mês — substitui a lista corrida do semestre inteiro */
 function mesCardHTML(){
   const meses=mesesSemestre(), i=mesIdx(), m=meses[i];
-  const evs=eventosOrdenados().filter(e=>e.data.slice(0,7)===m).filter(eventoVisivel);
-  const marcaveis=evs.filter(e=>e.tipo!=='feriado');
-  const feitos=marcaveis.filter(e=>S.semestre.feitos[e.id]).length;
+  const doMes=eventosOrdenados().filter(e=>e.data.slice(0,7)===m).filter(eventoVisivel);
+  const meus=doMes.filter(e=>!anteriorAChegada(e));       // desde que ela chegou
+  const antes=doMes.filter(anteriorAChegada);             // rolou antes dela
+  const marcaveis=meus.filter(marcavel);
+  const feitos=marcaveis.filter(estudado).length;
   const pct=marcaveis.length? Math.round(feitos/marcaveis.length*100) : 0;
+  const nAtraso=meus.filter(atrasado).length;
 
+  const setaOff='opacity:.25;pointer-events:none;';
   return `<div class="card">
     <div class="row" style="gap:4px">
-      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px" ${i===0?'disabled style="opacity:.25;width:auto;padding:6px 12px;font-size:18px"':''} onclick="irMes(-1)">‹</button>
+      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px;${i===0?setaOff:''}" onclick="irMes(-1)">‹</button>
       <div class="grow" style="text-align:center">
         <div style="font-weight:700;font-size:15px">${nomeMes(m)}</div>
-        <div class="tag-mut">${marcaveis.length? feitos+' de '+marcaveis.length+' estudados' : 'sem aulas'}</div>
+        <div class="tag-mut">${marcaveis.length? 'Estudei: '+feitos+' de '+marcaveis.length : 'nada a estudar neste mês'}</div>
       </div>
-      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px" ${i===meses.length-1?'disabled style="opacity:.25;width:auto;padding:6px 12px;font-size:18px"':''} onclick="irMes(1)">›</button>
+      <button class="btn quiet" style="width:auto;padding:6px 12px;font-size:18px;${i===meses.length-1?setaOff:''}" onclick="irMes(1)">›</button>
     </div>
     ${marcaveis.length?`<div class="mes-barra"><i style="width:${pct}%"></i></div>`:''}
-    ${evs.length? evs.map(eventoHTML).join('')
-      : '<div class="empty"><span class="big">🌴</span>Nenhum evento neste mês.</div>'}
+    ${nAtraso?`<div class="tag-mut" style="text-align:center;margin-bottom:4px">⚠ ${nAtraso} aula${nAtraso>1?'s':''} que já passou${nAtraso>1?'ram':''} e você ainda não estudou</div>`:''}
+
+    ${meus.length? meus.map(eventoHTML).join('')
+      : (antes.length?'' : '<div class="empty"><span class="big">🌴</span>Nenhum evento neste mês.</div>')}
+
+    ${antes.length?`<div style="margin-top:${meus.length?'14px':'4px'};border-top:1px solid var(--line);padding-top:10px">
+      <button class="btn quiet" style="text-align:left" onclick="verAntes=${!verAntes};render()">
+        ${verAntes?'⌄':'›'} Antes de eu chegar · ${antes.length} aula${antes.length>1?'s':''}
+      </button>
+      <div class="tag-mut" style="margin:-4px 0 6px">Não conta como atraso seu — mas o conteúdo cai na prova.</div>
+      ${verAntes? antes.map(eventoHTML).join('') : ''}
+    </div>`:''}
+
     ${i!==meses.indexOf(hojeStr().slice(0,7)) && meses.indexOf(hojeStr().slice(0,7))>=0
       ? `<button class="btn ghost" style="margin-top:12px" onclick="mesSel=null;render()">Voltar para hoje</button>`:''}
   </div>`;
@@ -1630,7 +1653,6 @@ function renderAjustes(){
     <h1 class="h-page">Ajustes</h1>
     <div class="card">
       <label style="margin-top:0">Seu nome</label><input id="aj-nome" value="${esc(S.nome)}">
-      <label>Meta semanal de foco (horas)</label><input id="aj-meta" type="number" value="${S.metaHoras}" min="1">
       <label>Pomodoro — foco (min)</label><input id="aj-foco" type="number" value="${S.pomo.foco}" min="5">
       <label>Pomodoro — pausa (min)</label><input id="aj-pausa" type="number" value="${S.pomo.pausa}" min="1">
       <button class="btn" style="margin-top:18px" onclick="salvarAjustes()">Salvar</button>
@@ -1679,7 +1701,6 @@ function renderAjustes(){
 }
 function salvarAjustes(){
   S.nome=$('#aj-nome').value.trim()||'Gabi';
-  S.metaHoras=Math.max(1,parseInt($('#aj-meta').value)||15);
   S.pomo.foco=Math.max(5,parseInt($('#aj-foco').value)||25);
   S.pomo.pausa=Math.max(1,parseInt($('#aj-pausa').value)||5);
   resetPomo(); salvar(); toast('Ajustes salvos ✓');
@@ -1790,12 +1811,10 @@ function onboarding(){
   abrirModal(`<h3 class="serif">Bem-vinda ao Jaleco 🩺</h3>
     <p class="sub" style="margin-top:6px">Seu espaço de estudos da faculdade: cronograma, flashcards com revisão espaçada, foco e progresso — tudo em um lugar, do seu jeito.</p>
     <label>Como você quer ser chamada?</label><input id="ob-nome" value="Gabi">
-    <label>Meta de foco por semana (horas)</label><input id="ob-meta" type="number" value="15" min="1">
     <button class="btn" style="margin-top:20px" onclick="fimOnboarding()">Começar ✨</button>`);
 }
 function fimOnboarding(){
   S.nome=$('#ob-nome').value.trim()||'Gabi';
-  S.metaHoras=Math.max(1,parseInt($('#ob-meta').value)||15);
   S.onboarded=true;
   if(!S.materias.length){
     ['Anatomia','Bioquímica','Histologia','Fisiologia'].forEach((n,i)=>S.materias.push({id:uid(),nome:n,cor:CORES[i]}));
