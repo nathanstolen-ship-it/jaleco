@@ -882,16 +882,26 @@ function desenharCard(){
   const texto=mostrandoVerso?cardAtual.verso:cardAtual.frente;
   $('#rv-card').innerHTML=`<div style="width:100%"><div class="face-label">${mostrandoVerso?'Resposta':'Pergunta'}</div>${faceHTML(texto)}</div>`;
   hidratarImagens($('#rv-card'));
-  $('#rv-actions').innerHTML= mostrandoVerso
+  $('#rv-actions').innerHTML= (mostrandoVerso
     ? `<div class="grade">
         <button class="g0" onclick="avaliar(0)">Errei<small>&lt; 10 min</small></button>
         <button class="g3" onclick="avaliar(3)">Difícil<small>${prevInt(3)}</small></button>
         <button class="g4" onclick="avaliar(4)">Bom<small>${prevInt(4)}</small></button>
         <button class="g5" onclick="avaliar(5)">Fácil<small>${prevInt(5)}</small></button>
       </div>`
-    : `<button class="btn" onclick="virarCard()">Mostrar resposta</button>`;
+    : `<button class="btn" onclick="virarCard()">Mostrar resposta</button>`)
+    + `<button class="btn quiet" style="margin-top:8px" onclick="pedirExplicacao()">🤖 Pedir explicação</button>`;
 }
 function virarCard(){ mostrandoVerso=!mostrandoVerso; desenharCard(); }
+function pedirExplicacao(){
+  if(!cardAtual) return;
+  const frente=semImg(cardAtual.frente), verso=semImg(cardAtual.verso);
+  const txt=`Estou estudando para a faculdade de Medicina e não entendi bem este flashcard.\n\nPergunta: "${frente}"\nResposta esperada: "${verso}"\n\nPode me explicar esse conceito do zero, de um jeito didático? Use uma analogia do dia a dia, aponte os erros mais comuns de quem está aprendendo esse tema, e termine com um resumo curto de até 5 linhas que eu consiga guardar antes da próxima revisão.`;
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(
+    ()=>toast('Prompt copiado! Cole no seu Claude ou ChatGPT 🤖'),
+    ()=>{ prompt('Copie o texto:', txt); }
+  );
+}
 function calcSM2(c,q){
   let {ease,intervalo,reps}=c;
   if(q<3){ reps=0; intervalo=0; }
