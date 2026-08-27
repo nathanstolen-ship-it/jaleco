@@ -230,7 +230,7 @@ const PADRAO = () => ({
   materias:[], blocos:[], decks:[], cards:[],
   sessoes:[], reviews:{}, atividade:{},
   onboarded:false,
-  sync:{codigo:null}, atualizadoEm:0, midias:{}
+  sync:{codigo:null, desativado:false}, atualizadoEm:0, midias:{}
 });
 
 function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
@@ -1201,14 +1201,14 @@ function renderAjustes(){
     <div class="card">
       <div style="font-weight:700;font-size:15px">Sincronizar entre aparelhos ☁️</div>
       ${S.sync&&S.sync.codigo ? `
-        <p class="sub" style="margin:4px 0 10px">Ativa. Use este código no outro aparelho (Ajustes → "Já tenho um código"):</p>
+        <p class="sub" style="margin:4px 0 10px">Ativa automaticamente. Qualquer aparelho que abrir este app já entra sincronizado — não precisa fazer nada.</p>
         <div class="row" style="gap:8px">
           <input value="${esc(S.sync.codigo)}" readonly style="font-family:monospace;font-size:14px">
           <button class="btn small ghost" onclick="copiarCodigo()">Copiar</button>
         </div>
         <div class="row" style="gap:8px;margin-top:10px">
           <button class="btn ghost" onclick="puxarSync(true).then(ok=>toast(ok?'Atualizado ✓':'Você já está com a versão mais recente'))">Sincronizar agora</button>
-          <button class="btn danger" style="width:auto" onclick="desativarSync()">Desativar</button>
+          <button class="btn danger" style="width:auto" onclick="desativarSync()">Desativar neste aparelho</button>
         </div>
         <button class="btn ghost" style="margin-top:10px" onclick="enviarImagensNuvem()">Enviar imagens deste aparelho ☁️</button>
         <p class="sub" style="margin-top:10px;font-size:12.5px">Imagens importadas com a sincronização ativa já sobem sozinhas. Use o botão acima para enviar as que foram importadas antes.</p>
@@ -1264,7 +1264,11 @@ function apagarTudo(){
 
 /* ================= SINCRONIZAÇÃO ENTRE APARELHOS ================= */
 /* Estratégia: o estado inteiro (sem imagens) vai para /api/sync sob um código
-   secreto. Quem tem o timestamp mais novo vence (last-write-wins).           */
+   secreto. Quem tem o timestamp mais novo vence (last-write-wins).
+   O código é fixo e embutido no app (linha abaixo) — qualquer aparelho que
+   abrir este app entra automaticamente no mesmo grupo de sincronização,
+   sem precisar ativar nem digitar nada.                                     */
+const CODIGO_SYNC_FIXO = 'jaleco-7fk3-9mq2-x8p1r5';
 let _pushTimer=null, _sincronizando=false;
 function agendarPush(){
   if(!S.sync||!S.sync.codigo) return;
@@ -1305,15 +1309,19 @@ function gerarCodigo(){
   const p=()=>Math.random().toString(36).slice(2,6);
   return 'jaleco-'+p()+'-'+p()+'-'+p();
 }
-function ativarSync(){
-  S.sync.codigo=gerarCodigo();
-  salvar(); render();
+async function ativarSync(){
+  S.sync.codigo=CODIGO_SYNC_FIXO; S.sync.desativado=false;
+  salvarLocal();
+  toast('Buscando seus dados…');
+  const achou=await puxarSync();
+  if(!achou) salvar();
+  render();
   toast('Sincronização ativada ✓');
 }
 async function entrarComCodigo(){
   const c=($('#sync-cod').value||'').trim().toLowerCase();
   if(c.length<8) return toast('Código muito curto');
-  S.sync.codigo=c; salvarLocal();
+  S.sync.codigo=c; S.sync.desativado=false; salvarLocal();
   toast('Buscando seus dados…');
   const achou=await puxarSync(true);
   if(achou) toast('Aparelho sincronizado 🎉');
@@ -1321,8 +1329,8 @@ async function entrarComCodigo(){
   render();
 }
 function desativarSync(){
-  if(!confirm('Desativar a sincronização neste aparelho? Os dados locais continuam intactos.')) return;
-  S.sync.codigo=null; salvarLocal(); render();
+  if(!confirm('Desativar a sincronização neste aparelho? Os dados locais continuam intactos, mas vão parar de ir pra nuvem até você reativar.')) return;
+  S.sync.codigo=null; S.sync.desativado=true; salvarLocal(); render();
 }
 function copiarCodigo(){
   navigator.clipboard&&navigator.clipboard.writeText(S.sync.codigo);
@@ -1353,7 +1361,11 @@ function fimOnboarding(){
 /* ================= INÍCIO ================= */
 carregar(); aplicarTema(); nav('hoje');
 if(!S.onboarded) onboarding();
-puxarSync(); // se a sincronização estiver ativa, busca a versão mais recente
+if(!S.sync) S.sync={codigo:null};
+if(!S.sync.codigo && !S.sync.desativado){ S.sync.codigo=CODIGO_SYNC_FIXO; salvarLocal(); }
+// puxa a versão mais recente da nuvem; se não havia nada lá ainda (1º aparelho
+// a usar o código), empurra o estado local pra servir de ponto de partida
+puxarSync().then(achouRemoto => { if(!achouRemoto) salvar(); });
 </script>
 </body>
 </html>
