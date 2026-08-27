@@ -65,8 +65,24 @@ label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 
 .btn.danger{background:transparent;color:var(--danger)}
 
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:100px;background:var(--brand-soft);color:var(--brand)}
+.chip.off{opacity:.4}
+.chip.sm{font-size:11.5px;padding:4px 9px}
 .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .tag-mut{font-size:12.5px;color:var(--mut)}
+
+/* Alternador de 2 views (Minha semana / Grade da faculdade) */
+.seg{display:flex;gap:6px;margin:14px 0 4px}
+.seg button{flex:1;padding:11px 6px;border-radius:14px;background:var(--card);border:1.5px solid var(--line);color:var(--mut);font-weight:600;font-size:13px;font-family:inherit;cursor:pointer}
+.seg button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+
+/* Grade fixa semanal (somente leitura) */
+.grade-table{width:100%;border-collapse:separate;border-spacing:3px;margin-top:8px}
+.grade-table th{font-size:11px;font-weight:700;color:var(--mut);padding:2px}
+.grade-table td{vertical-align:top;width:25%}
+.grade-hora{font-size:10.5px;color:var(--mut);font-weight:600;white-space:nowrap;text-align:right;padding-right:4px;width:auto!important}
+.grade-cell{border-radius:9px;padding:6px 4px;font-size:10.5px;font-weight:700;color:#fff;text-align:center;line-height:1.2}
+.grade-vazio{border-radius:9px;padding:6px 4px;background:var(--line);opacity:.4;min-height:16px}
+.ev-passou{opacity:.45}
 
 /* Nav */
 nav{
@@ -204,6 +220,203 @@ nav svg{width:23px;height:23px}
 <input type="file" id="file-txt" accept=".txt,.csv,.tsv" style="display:none" onchange="lerTxt(this)">
 
 <script>
+/* ============================================================================
+   GRADE CURRICULAR DO SEMESTRE — editar isto a cada semestre novo
+   ----------------------------------------------------------------------------
+   COMO TROCAR DE SEMESTRE (leia antes de editar):
+
+   1. Troque o `id` (ex.: '2026-2' -> '2027-1'). Isso zera automaticamente as
+      marcações manuais do semestre anterior (ver garantirVersaoSemestre()),
+      pra não herdar "estudado" de um semestre pro outro.
+
+   2. Cada evento PRECISA de um `id` único, escrito à mão, no formato
+      data-disciplina-assunto. NUNCA gere o id a partir da posição no array:
+      a marcação dela é guardada por esse id em S.semestre.feitos, então um id
+      recalculado faz ela perder o que já tinha marcado.
+
+   3. `disciplinaId` (na grade) e os itens de `disciplinas` (nos eventos)
+      precisam bater com algum `id` da lista `disciplinas`.
+
+   4. `dia` usa a mesma convenção do resto do app: 0=Seg, 1=Ter ... 6=Dom.
+
+   5. Nada daqui é salvo no aparelho: é lido direto do código. Por isso editar
+      este bloco e publicar já atualiza o app dela em todos os aparelhos.
+
+   Fonte destes dados: Manual do Aluno S3 (M51) 2026.2 — IDOMED / Estácio FMJ.
+   ============================================================================ */
+const SEMESTRE = {
+  id:'2026-2',
+  nome:'2026.2',
+  periodo:'3º período · Turma M51',
+  inicio:'2026-07-28',
+  fim:'2026-12-08',
+  fonte:'Manual do Aluno S3 (M51) 2026.2',
+
+  disciplinas:[
+    {id:'para', tag:'Parasito',  nome:'Parasitologia e Imunologia Médica',             cor:'#8E2D4B', coord:'Valter Menezes Barbosa Filho'},
+    {id:'hmp3', tag:'HMP III',   nome:'Humanidades Médicas e Profissionalismo III',    cor:'#3E6B8C', coord:'Suziy de Matos Bandeira Lopes'},
+    {id:'iesc', tag:'IESC III',  nome:'Integração Ensino e Serviço na Comunidade III', cor:'#5B7B6C', coord:'Rosa Maria Grangeiro Martins'},
+    {id:'sop3', tag:'SOP III',   nome:'Sistemas Orgânicos e Práticas Médicas III',     cor:'#C08A2D', coord:'Cíntia de Lima Garcia'},
+    {id:'patg', tag:'Patologia', nome:'Patologia Geral',                               cor:'#7A5296', coord:'Camila Bezerra Nobre'},
+    {id:'mpe3', tag:'MPE III',   nome:'Metodologia de Pesquisa e Extensão III',        cor:'#B3453F', coord:'Camila Bezerra Nobre'},
+  ],
+
+  /* faixas de horário da grade (linhas da tabela). Uma aula que cobre mais de
+     uma faixa aparece em todas que ela cruza — ver gradeTableHTML(). */
+  faixas:[['07:50','09:30'],['09:40','11:20'],['13:50','16:30'],['16:30','17:20']],
+
+  /* grade fixa semanal — só leitura, não é o plano de estudo pessoal dela */
+  grade:[
+    {dia:0, inicio:'07:50', fim:'11:20', disciplinaId:'para'},
+    {dia:1, inicio:'07:50', fim:'09:30', disciplinaId:'hmp3'},
+    {dia:1, inicio:'09:40', fim:'11:20', disciplinaId:'para'},
+    {dia:1, inicio:'13:50', fim:'16:30', disciplinaId:'iesc'},
+    {dia:2, inicio:'07:50', fim:'11:20', disciplinaId:'sop3'},
+    {dia:2, inicio:'13:50', fim:'16:30', disciplinaId:'patg'},
+    {dia:2, inicio:'16:30', fim:'17:20', disciplinaId:'mpe3'},
+    {dia:3, inicio:'07:50', fim:'11:20', disciplinaId:'sop3'},
+    {dia:3, inicio:'13:50', fim:'17:20', disciplinaId:'sop3'},
+  ],
+
+  /* tipos: aula | pratica | seminario | prova | entrega | devolutiva | feriado | evento */
+  eventos:[
+    {id:'2026-07-28-acolhimento', data:'2026-07-28', disciplinas:[], tipo:'evento', desc:'Semana de acolhimento e nivelamento (28 a 31/07)'},
+
+    {id:'2026-08-03-para-intro', data:'2026-08-03', disciplinas:['para'], tipo:'aula', desc:'Apresentação da disciplina · Introdução à Parasitologia · Doenças negligenciadas'},
+    {id:'2026-08-04-hmp3-contrato', data:'2026-08-04', disciplinas:['hmp3'], tipo:'aula', desc:'Planejamento do eixo · Contrato pedagógico · Projeto Integrador'},
+    {id:'2026-08-04-iesc-pnab', data:'2026-08-04', disciplinas:['iesc'], tipo:'aula', desc:'Apresentação da disciplina · Metodologia extensionista · Conhecendo a PNAB'},
+    {id:'2026-08-04-para-cestodeos', data:'2026-08-04', disciplinas:['para'], tipo:'aula', desc:'Cestódeos: Taenia (teníase e cisticercose), Hymenolepis, Onchocerca'},
+    {id:'2026-08-05-sop3-histo-digestorio', data:'2026-08-05', disciplinas:['sop3'], tipo:'aula', desc:'Apresentação · Histologia e embriogênese do sistema digestório (tubo digestivo)'},
+    {id:'2026-08-05-patg-lesao-celular', data:'2026-08-05', disciplinas:['patg'], tipo:'aula', desc:'Apresentação da disciplina · Estudo da patologia · Lesão celular'},
+    {id:'2026-08-06-sop3-anat-oral', data:'2026-08-06', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia da cavidade oral, nasofaringe e glândulas salivares · Sistema hormonal'},
+    {id:'2026-08-10-para-imunorregulacao', data:'2026-08-10', disciplinas:['para'], tipo:'aula', desc:'Apresentação antigênica e imunorregulação linfocitária'},
+    {id:'2026-08-11-feriado-estudante', data:'2026-08-11', disciplinas:[], tipo:'feriado', desc:'Feriado estadual — Dia do Estudante'},
+    {id:'2026-08-12-mpe3-cronograma', data:'2026-08-12', disciplinas:['mpe3'], tipo:'aula', desc:'Apresentação do cronograma'},
+    {id:'2026-08-12-sop3-lhs-esteril', data:'2026-08-12', disciplinas:['sop3'], tipo:'pratica', desc:'Prática LHS: manuseio de materiais estéreis / calçar luvas'},
+    {id:'2026-08-12-patg-morte-celular', data:'2026-08-12', disciplinas:['patg'], tipo:'aula', desc:'Morte celular e sua importância clínica'},
+    {id:'2026-08-13-sop3-anat-pescoco', data:'2026-08-13', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia do pescoço (faringe, esôfago, tireoide) · Fisiologia da hipófise I e II'},
+    {id:'2026-08-17-para-hipersensibilidade', data:'2026-08-17', disciplinas:['para'], tipo:'aula', desc:'Reações de hipersensibilidade · Introdução à helmintologia (Ascaris, Strongyloides)'},
+    {id:'2026-08-18-hmp3-mccp-fundamentos', data:'2026-08-18', disciplinas:['hmp3'], tipo:'aula', desc:'Fundamentos do cuidado centrado na pessoa (Balint, Carl Rogers)'},
+    {id:'2026-08-18-iesc-pnab-cont', data:'2026-08-18', disciplinas:['iesc'], tipo:'aula', desc:'Conhecendo a PNAB: importância, conjuntura e atualizações'},
+    {id:'2026-08-18-para-lab-taenia', data:'2026-08-18', disciplinas:['para'], tipo:'pratica', desc:'Laboratório: identificação de Taenia, Hymenolepis, Ascaris e Strongyloides'},
+    {id:'2026-08-19-mpe3-qualitativa', data:'2026-08-19', disciplinas:['mpe3'], tipo:'aula', desc:'Pesquisa qualitativa · Plataforma iSkills e SAVA'},
+    {id:'2026-08-19-sop3-lab-cabeca', data:'2026-08-19', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: anatomia da cabeça + lâminas de tubo digestivo'},
+    {id:'2026-08-19-patg-acumulos', data:'2026-08-19', disciplinas:['patg'], tipo:'aula', desc:'Acúmulos intracelulares (lâmina de esteatose)'},
+    {id:'2026-08-20-sop3-anat-digestivo1', data:'2026-08-20', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia do sistema digestivo I · Mastigação, deglutição e motilidade'},
+    {id:'2026-08-24-para-imunizacao', data:'2026-08-24', disciplinas:['para'], tipo:'aula', desc:'Imunização · Estudo dirigido · Orientação para os seminários'},
+    {id:'2026-08-25-hmp3-tbl-equipes', data:'2026-08-25', disciplinas:['hmp3'], tipo:'aula', desc:'Oficina de TBL e divisão das equipes'},
+    {id:'2026-08-25-iesc-esf', data:'2026-08-25', disciplinas:['iesc'], tipo:'aula', desc:'Atributos da ESF · Equipe multiprofissional · Matriciamento'},
+    {id:'2026-08-25-para-enterobius', data:'2026-08-25', disciplinas:['para'], tipo:'aula', desc:'Enterobius, Trichuris e Wuchereria (filariose bancroftiana)'},
+    {id:'2026-08-26-mpe3-educacao-saude', data:'2026-08-26', disciplinas:['mpe3'], tipo:'aula', desc:'Estratégias de educação em saúde · Orientação'},
+    {id:'2026-08-26-sop3-exame-oral', data:'2026-08-26', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: anatomia do digestivo I + exame físico da cavidade oral'},
+    {id:'2026-08-26-patg-adaptacoes', data:'2026-08-26', disciplinas:['patg'], tipo:'aula', desc:'Adaptações celulares (lâmina de hiperplasia prostática)'},
+    {id:'2026-08-27-sop3-hipofise3', data:'2026-08-27', disciplinas:['sop3'], tipo:'aula', desc:'Hormônio do crescimento · Secreções do pâncreas, fígado e vias biliares'},
+    {id:'2026-08-31-para-transplantes', data:'2026-08-31', disciplinas:['para'], tipo:'aula', desc:'Aloreatividade, rejeição e transplante de células-tronco'},
+
+    {id:'2026-09-01-hmp3-mccp1', data:'2026-09-01', disciplinas:['hmp3'], tipo:'aula', desc:'MCCP 1º componente: explorando a saúde, a doença e a experiência (TBL)'},
+    {id:'2026-09-01-iesc-vigilancia', data:'2026-09-01', disciplinas:['iesc'], tipo:'aula', desc:'Vigilância em Saúde na APS — tema do Projeto Integrador'},
+    {id:'2026-09-01-para-lab-nematodeos', data:'2026-09-01', disciplinas:['para'], tipo:'pratica', desc:'Laboratório: Enterobius, Trichuris e Wuchereria · Revisão de lâminas'},
+    {id:'2026-09-02-teste-progresso', data:'2026-09-02', disciplinas:[], tipo:'evento', desc:'Teste de Progresso / INOVAMED — sem aula'},
+    {id:'2026-09-03-sop3-neurohipofise', data:'2026-09-03', disciplinas:['sop3'], tipo:'aula', desc:'Hormônios da neuro-hipófise · Regulação do cálcio e fosfato'},
+    {id:'2026-09-07-feriado-independencia', data:'2026-09-07', disciplinas:[], tipo:'feriado', desc:'Feriado nacional — Independência do Brasil'},
+    {id:'2026-09-08-hmp3-mccp2', data:'2026-09-08', disciplinas:['hmp3'], tipo:'aula', desc:'MCCP 2º componente: a pessoa como um todo (role play)'},
+    {id:'2026-09-08-iesc-ubs1', data:'2026-09-08', disciplinas:['iesc'], tipo:'pratica', desc:'Prática extensionista na UBS: PNAB, processo de trabalho da ESF, vigilância'},
+    {id:'2026-09-08-para-seminarios', data:'2026-09-08', disciplinas:['para'], tipo:'seminario', desc:'Seminários temáticos de Parasitologia — vale 10% da PR1'},
+    {id:'2026-09-09-mpe3-orientacao', data:'2026-09-09', disciplinas:['mpe3'], tipo:'aula', desc:'Orientação (tutoria)'},
+    {id:'2026-09-09-sop3-histo-glandulas', data:'2026-09-09', disciplinas:['sop3'], tipo:'aula', desc:'Histologia e embriogênese das glândulas e órgãos anexos do TGI'},
+    {id:'2026-09-09-patg-inflamacao', data:'2026-09-09', disciplinas:['patg'], tipo:'aula', desc:'Inflamação aguda e crônica (PBL: tuberculose)'},
+    {id:'2026-09-10-sop3-tireoide', data:'2026-09-10', disciplinas:['sop3'], tipo:'aula', desc:'Fisiologia da tireoide I · Prática: cateterismo nasogástrico e enteral'},
+    {id:'2026-09-14-para-lab-sorologia', data:'2026-09-14', disciplinas:['para'], tipo:'pratica', desc:'Laboratório: PCR, ASO, tipagem sanguínea e teste de Coombs'},
+    {id:'2026-09-15-feriado-dores', data:'2026-09-15', disciplinas:[], tipo:'feriado', desc:'Feriado municipal — Nossa Senhora das Dores'},
+    {id:'2026-09-16-mpe3-entrega-projeto', data:'2026-09-16', disciplinas:['mpe3'], tipo:'entrega', desc:'PR1 — entrega do projeto de pesquisa'},
+    {id:'2026-09-16-sop3-pr1-pratica', data:'2026-09-16', disciplinas:['sop3'], tipo:'prova', desc:'PR1 — prova prática de Anatomia e Histologia (20%)'},
+    {id:'2026-09-17-sop3-pr1-teorica', data:'2026-09-17', disciplinas:['sop3'], tipo:'prova', desc:'PR1 — prova teórica unificada (70% da nota)'},
+    {id:'2026-09-21-para-pr1', data:'2026-09-21', disciplinas:['para'], tipo:'prova', desc:'PR1 — teórica e prática'},
+    {id:'2026-09-22-hmp3-pr1', data:'2026-09-22', disciplinas:['hmp3'], tipo:'prova', desc:'PR1 + entrega do portfólio'},
+    {id:'2026-09-22-iesc-pr1', data:'2026-09-22', disciplinas:['iesc'], tipo:'prova', desc:'PR1 — prova escrita + devolutiva'},
+    {id:'2026-09-23-patg-pr1', data:'2026-09-23', disciplinas:['patg'], tipo:'prova', desc:'PR1 + devolutiva'},
+    {id:'2026-09-24-sop3-pr1-lhs', data:'2026-09-24', disciplinas:['sop3'], tipo:'prova', desc:'PR1 — prova prática no LHS (10%)'},
+    {id:'2026-09-28-para-esquistossomose', data:'2026-09-28', disciplinas:['para'], tipo:'aula', desc:'Devolutiva da PR1 · Schistosoma — esquistossomose'},
+    {id:'2026-09-29-hmp3-devolutiva-pr1', data:'2026-09-29', disciplinas:['hmp3'], tipo:'devolutiva', desc:'Devolutiva e vista de prova da PR1'},
+    {id:'2026-09-29-iesc-vivencias1', data:'2026-09-29', disciplinas:['iesc'], tipo:'seminario', desc:'Compartilhamento de vivências na ESF · Propostas do Projeto Integrador'},
+    {id:'2026-09-29-para-ancilostomose', data:'2026-09-29', disciplinas:['para'], tipo:'aula', desc:'Ancylostoma e Necator · Larva migrans cutânea'},
+    {id:'2026-09-30-mpe3-comunicacao', data:'2026-09-30', disciplinas:['mpe3'], tipo:'aula', desc:'Comunicação eficaz em saúde · Orientação do material de comunicação'},
+    {id:'2026-09-30-sop3-anat-digestivo23', data:'2026-09-30', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia do sistema digestivo II e III (cólons, reto, fígado e vias biliares)'},
+    {id:'2026-09-30-patg-reparo', data:'2026-09-30', disciplinas:['patg'], tipo:'aula', desc:'Reparo'},
+
+    {id:'2026-10-01-sop3-histo-endocrino', data:'2026-10-01', disciplinas:['sop3'], tipo:'aula', desc:'Histologia do sistema endócrino · Semiologia da tireoide · Devolutiva PR1 teórica'},
+    {id:'2026-10-05-para-tumoral', data:'2026-10-05', disciplinas:['para'], tipo:'aula', desc:'Reconhecimento imunológico da célula tumoral · Imunoterapia antitumoral'},
+    {id:'2026-10-06-hmp3-mccp3', data:'2026-10-06', disciplinas:['hmp3'], tipo:'aula', desc:'MCCP 3º componente: plano conjunto de manejo dos problemas (TBL)'},
+    {id:'2026-10-06-iesc-humanizacao', data:'2026-10-06', disciplinas:['iesc'], tipo:'aula', desc:'Política Nacional de Humanização e acolhimento na UBS'},
+    {id:'2026-10-06-para-giardia', data:'2026-10-06', disciplinas:['para'], tipo:'aula', desc:'Introdução à protozoologia · Giardia — giardíase'},
+    {id:'2026-10-07-mpe3-material', data:'2026-10-07', disciplinas:['mpe3'], tipo:'aula', desc:'Orientação para construção do material de comunicação'},
+    {id:'2026-10-07-sop3-exame-abdome', data:'2026-10-07', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: anatomia do digestivo II/III + exame físico do abdome'},
+    {id:'2026-10-07-patg-aterosclerose', data:'2026-10-07', disciplinas:['patg'], tipo:'aula', desc:'Aterosclerose'},
+    {id:'2026-10-08-sop3-adrenais', data:'2026-10-08', disciplinas:['sop3'], tipo:'aula', desc:'Fisiologia dos hormônios das adrenais · Estudos de caso clínico'},
+    {id:'2026-10-12-feriado-aparecida', data:'2026-10-12', disciplinas:[], tipo:'feriado', desc:'Feriado nacional — Nossa Senhora Aparecida'},
+    {id:'2026-10-13-hmp3-orienta-pi', data:'2026-10-13', disciplinas:['hmp3'], tipo:'aula', desc:'Orientação do Projeto Integrador (atendimento das equipes)'},
+    {id:'2026-10-13-iesc-ubs2', data:'2026-10-13', disciplinas:['iesc'], tipo:'pratica', desc:'Prática extensionista na UBS: PNH e planejamento da ação do PI'},
+    {id:'2026-10-13-para-amebiase', data:'2026-10-13', disciplinas:['para'], tipo:'aula', desc:'Trichomonas — tricomoníase · Entamoeba e amebíase'},
+    {id:'2026-10-14-mpe3-campo', data:'2026-10-14', disciplinas:['mpe3'], tipo:'pratica', desc:'Implementação da tecnologia educativa no território (campo externo)'},
+    {id:'2026-10-14-sop3-lab-endocrino', data:'2026-10-14', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: organização geral do sistema endócrino + lâminas'},
+    {id:'2026-10-14-patg-circulatorios1', data:'2026-10-14', disciplinas:['patg'], tipo:'aula', desc:'Distúrbios circulatórios I'},
+    {id:'2026-10-15-dia-professor', data:'2026-10-15', disciplinas:['sop3'], tipo:'feriado', desc:'Dia do Professor — SOP III sem aula'},
+    {id:'2026-10-19-para-vdrl', data:'2026-10-19', disciplinas:['para'], tipo:'pratica', desc:'Prática: fator reumatoide e VDRL · Produção dos materiais educativos do PI'},
+    {id:'2026-10-20-forum-idomed', data:'2026-10-20', disciplinas:[], tipo:'feriado', desc:'Fórum Docente IDOMED — sem aula'},
+    {id:'2026-10-21-mpe3-submissao', data:'2026-10-21', disciplinas:['mpe3'], tipo:'entrega', desc:'Submissão do material científico'},
+    {id:'2026-10-21-sop3-histo-urinario', data:'2026-10-21', disciplinas:['sop3'], tipo:'aula', desc:'Histologia e embriogênese do aparelho urinário'},
+    {id:'2026-10-21-patg-circulatorios2', data:'2026-10-21', disciplinas:['patg'], tipo:'aula', desc:'Distúrbios circulatórios II (hemorragia)'},
+    {id:'2026-10-22-sop3-anat-urinario', data:'2026-10-22', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia do sistema endócrino e urinário · Hemodinâmica renal'},
+    {id:'2026-10-26-para-chagas', data:'2026-10-26', disciplinas:['para'], tipo:'aula', desc:'Toxoplasma e coccídeos oportunistas · Trypanosoma — doença de Chagas'},
+    {id:'2026-10-27-hmp3-mccp4', data:'2026-10-27', disciplinas:['hmp3'], tipo:'aula', desc:'MCCP 4º componente: fortalecendo a relação pessoa–médico (TBL)'},
+    {id:'2026-10-27-iesc-intervencao-pi', data:'2026-10-27', disciplinas:['iesc'], tipo:'pratica', desc:'Prática na UBS — execução da intervenção do Projeto Integrador'},
+    {id:'2026-10-27-para-lab-protozoarios', data:'2026-10-27', disciplinas:['para'], tipo:'pratica', desc:'Laboratório: Ancylostoma, Necator, Schistosoma e protozoários'},
+    {id:'2026-10-28-mpe3-orienta-apresentacao', data:'2026-10-28', disciplinas:['mpe3'], tipo:'aula', desc:'Orientações sobre a apresentação'},
+    {id:'2026-10-28-sop3-lab-urinario', data:'2026-10-28', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: anatomia do aparelho urinário + lâminas'},
+    {id:'2026-10-28-patg-neoplasia1', data:'2026-10-28', disciplinas:['patg'], tipo:'aula', desc:'Neoplasia I'},
+    {id:'2026-10-29-sop3-sondagem', data:'2026-10-29', disciplinas:['sop3'], tipo:'pratica', desc:'Estudo de caso · Sondagens urinárias · Avaliação da função renal'},
+
+    {id:'2026-11-02-feriado-finados', data:'2026-11-02', disciplinas:[], tipo:'feriado', desc:'Feriado nacional — Dia de Finados'},
+    {id:'2026-11-03-hmp3-narrativa', data:'2026-11-03', disciplinas:['hmp3'], tipo:'aula', desc:'O médico na relação com a pessoa · Competência narrativa (TBL)'},
+    {id:'2026-11-03-iesc-vivencias2', data:'2026-11-03', disciplinas:['iesc'], tipo:'seminario', desc:'Seminário: ações do PI na comunidade (com HMP III e Parasito)'},
+    {id:'2026-11-03-para-leishmaniose-lta', data:'2026-11-03', disciplinas:['para'], tipo:'aula', desc:'Leishmania — leishmaniose tegumentar americana · Artrópodes peçonhentos'},
+    {id:'2026-11-04-mpe3-banca', data:'2026-11-04', disciplinas:['mpe3'], tipo:'entrega', desc:'Apresentação do material científico à banca'},
+    {id:'2026-11-04-sop3-histo-reprodutor', data:'2026-11-04', disciplinas:['sop3'], tipo:'aula', desc:'Histologia e embriogênese do aparelho reprodutor'},
+    {id:'2026-11-04-patg-neoplasia2', data:'2026-11-04', disciplinas:['patg'], tipo:'aula', desc:'Neoplasia II'},
+    {id:'2026-11-05-sop3-anat-reprodutor', data:'2026-11-05', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia da pelve e do aparelho reprodutor · Hormônios das gônadas'},
+    {id:'2026-11-09-para-autoimunes', data:'2026-11-09', disciplinas:['para'], tipo:'aula', desc:'Doenças autoimunes'},
+    {id:'2026-11-10-hmp3-etica', data:'2026-11-10', disciplinas:['hmp3'], tipo:'aula', desc:'Ética na entrevista clínica: sigilo e confidencialidade (TBL)'},
+    {id:'2026-11-10-iesc-redes', data:'2026-11-10', disciplinas:['iesc'], tipo:'aula', desc:'Redes de Atenção e regulação em saúde · APS como coordenadora do cuidado'},
+    {id:'2026-11-10-para-malaria', data:'2026-11-10', disciplinas:['para'], tipo:'aula', desc:'Leishmaniose visceral americana · Plasmodium — malária'},
+    {id:'2026-11-11-mpe3-iskills', data:'2026-11-11', disciplinas:['mpe3'], tipo:'entrega', desc:'Fechamento do iSkills'},
+    {id:'2026-11-11-sop3-lab-reprodutor', data:'2026-11-11', disciplinas:['sop3'], tipo:'pratica', desc:'Prática: anatomia do aparelho reprodutor + lâminas'},
+    {id:'2026-11-11-patg-neoplasia3', data:'2026-11-11', disciplinas:['patg'], tipo:'aula', desc:'Neoplasia III (PBL de neoplasia)'},
+    {id:'2026-11-12-sop3-mamas', data:'2026-11-12', disciplinas:['sop3'], tipo:'aula', desc:'Anatomia das mamas · Regulação renal do pH, cálcio, fosfato e potássio'},
+    {id:'2026-11-16-para-imunodeficiencias', data:'2026-11-16', disciplinas:['para'], tipo:'aula', desc:'Imunodeficiências primárias · Desnutrição · HIV/SIDA (JIGSAW)'},
+    {id:'2026-11-17-hmp3-produtos-pi', data:'2026-11-17', disciplinas:['hmp3'], tipo:'entrega', desc:'Apresentação dos produtos de intervenção do Projeto Integrador'},
+    {id:'2026-11-17-iesc-visita-rede', data:'2026-11-17', disciplinas:['iesc'], tipo:'pratica', desc:'Prática extensionista: visita a serviços da rede de atenção'},
+    {id:'2026-11-17-para-lab-plasmodio', data:'2026-11-17', disciplinas:['para'], tipo:'pratica', desc:'Laboratório: plasmódios, T. cruzi, Leishmania e Toxoplasma · Revisão de lâminas'},
+    {id:'2026-11-18-sop3-pr2-pratica', data:'2026-11-18', disciplinas:['sop3'], tipo:'prova', desc:'PR2 — prova prática de Anatomia e Histologia (20%)'},
+    {id:'2026-11-19-sop3-pr2-teorica', data:'2026-11-19', disciplinas:['sop3'], tipo:'prova', desc:'PR2 — prova teórica unificada (70% da nota)'},
+    {id:'2026-11-23-para-pr2', data:'2026-11-23', disciplinas:['para'], tipo:'prova', desc:'PR2 — teórica e prática'},
+    {id:'2026-11-24-hmp3-pr2', data:'2026-11-24', disciplinas:['hmp3'], tipo:'prova', desc:'PR2 — prova teórica'},
+    {id:'2026-11-24-iesc-pr2', data:'2026-11-24', disciplinas:['iesc'], tipo:'prova', desc:'PR2 + devolutiva'},
+    {id:'2026-11-25-patg-pr2', data:'2026-11-25', disciplinas:['patg'], tipo:'prova', desc:'PR2 + devolutiva'},
+    {id:'2026-11-26-sop3-pr2-lhs', data:'2026-11-26', disciplinas:['sop3'], tipo:'prova', desc:'PR2 — prova prática no LHS (10%)'},
+    {id:'2026-11-30-para-2chamada', data:'2026-11-30', disciplinas:['para'], tipo:'prova', desc:'Segunda chamada · Análise e discussão da PR2'},
+
+    {id:'2026-12-01-hmp3-2chamada', data:'2026-12-01', disciplinas:['hmp3','iesc'], tipo:'prova', desc:'Devolutiva da PR2, segunda chamada e semana de flexibilização'},
+    {id:'2026-12-02-sop3-2chamada', data:'2026-12-02', disciplinas:['sop3'], tipo:'prova', desc:'Segunda chamada teórico-prática + devolutiva da PR2'},
+    {id:'2026-12-02-patg-2chamada', data:'2026-12-02', disciplinas:['patg','mpe3'], tipo:'prova', desc:'Segunda chamada'},
+    {id:'2026-12-03-para-final', data:'2026-12-03', disciplinas:['para'], tipo:'prova', desc:'PROVA FINAL — 100% teórica, todo o conteúdo do semestre'},
+    {id:'2026-12-03-mpe3-final', data:'2026-12-03', disciplinas:['mpe3'], tipo:'prova', desc:'Prova final / semana de flexibilização'},
+    {id:'2026-12-03-sop3-suturas', data:'2026-12-03', disciplinas:['sop3'], tipo:'pratica', desc:'Flexibilização curricular — oficina de suturas'},
+    {id:'2026-12-04-patg-final', data:'2026-12-04', disciplinas:['patg'], tipo:'prova', desc:'PROVA FINAL'},
+    {id:'2026-12-07-final-iesc-hmp-sop', data:'2026-12-07', disciplinas:['iesc','hmp3','sop3'], tipo:'prova', desc:'PROVA FINAL — IESC III e HMP III (manhã) · SOP III (tarde)'},
+    {id:'2026-12-08-fechamento', data:'2026-12-08', disciplinas:[], tipo:'evento', desc:'Fechamento da pauta eletrônica — fim do semestre'},
+  ],
+};
+
 /* ================= ESTADO ================= */
 const CORES = ['#8E2D4B','#3E6B8C','#5B7B6C','#C08A2D','#7A5296','#B3453F','#2F7E8C','#8C6A4F'];
 const TEMAS = {
@@ -230,7 +443,8 @@ const PADRAO = () => ({
   materias:[], blocos:[], decks:[], cards:[],
   sessoes:[], reviews:{}, atividade:{},
   onboarded:false,
-  sync:{codigo:null, desativado:false}, atualizadoEm:0, midias:{}
+  sync:{codigo:null, desativado:false}, atualizadoEm:0, midias:{},
+  semestre:{versao:SEMESTRE.id, feitos:{}}
 });
 
 function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
@@ -252,6 +466,37 @@ function dataDoDia(idx){ // data (YYYY-MM-DD) do dia idx na semana atual
 }
 function addDias(str, n){ const [y,m,dd]=str.split('-').map(Number); const d=new Date(y,m-1,dd+n); return hojeStr(d); }
 function materia(id){ return S.materias.find(m=>m.id===id); }
+
+/* ---- semestre (datas comparadas SEMPRE como string ISO: new Date('2026-08-05')
+   seria UTC e no fuso do Brasil voltaria um dia) ---- */
+function garantirVersaoSemestre(){
+  if(!S.semestre) S.semestre={versao:SEMESTRE.id, feitos:{}};
+  if(S.semestre.versao!==SEMESTRE.id){ S.semestre={versao:SEMESTRE.id, feitos:{}}; salvarLocal(); }
+  if(!S.semestre.feitos) S.semestre.feitos={};
+}
+function disciplina(id){ return SEMESTRE.disciplinas.find(d=>d.id===id); }
+function diasAte(iso){
+  const [y1,m1,d1]=hojeStr().split('-').map(Number), [y2,m2,d2]=iso.split('-').map(Number);
+  return Math.round((new Date(y2,m2-1,d2) - new Date(y1,m1-1,d1))/86400000);
+}
+function statusEvento(ev){ const h=hojeStr(); return ev.data<h?'passou':ev.data===h?'hoje':'futuro'; }
+function eventosOrdenados(){ return [...SEMESTRE.eventos].sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0); }
+function eventosDoDia(iso){ return SEMESTRE.eventos.filter(e=>e.data===iso); }
+function gradeDoDia(dia){ return SEMESTRE.grade.filter(g=>g.dia===dia).sort((a,b)=>a.inicio<b.inicio?-1:1); }
+function proximaProva(){
+  const h=hojeStr();
+  return eventosOrdenados().find(e=>e.tipo==='prova'&&e.data>=h)||null;
+}
+function ehFeriado(iso){ return eventosDoDia(iso).some(e=>e.tipo==='feriado'&&!e.disciplinas.length); }
+function dataCurta(iso){ const [,m,d]=iso.split('-'); return d+'/'+m; }
+function diaDaData(iso){ const [y,m,d]=iso.split('-').map(Number); return DIAS[(new Date(y,m-1,d).getDay()+6)%7]; }
+const ICONE_TIPO = {prova:'📝', entrega:'📌', feriado:'🌴', pratica:'🔬', seminario:'🗣️', devolutiva:'📋', evento:'📅', aula:'📖'};
+function semanaDoSemestre(){
+  const h=hojeStr();
+  if(h<SEMESTRE.inicio||h>SEMESTRE.fim) return null;
+  const total=Math.ceil((diasAte(SEMESTRE.fim)+Math.abs(diasAte(SEMESTRE.inicio))+1)/7);
+  return {atual:Math.floor(-diasAte(SEMESTRE.inicio)/7)+1, total};
+}
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
 function marcarAtividade(){ S.atividade[hojeStr()]=true; }
 
@@ -371,7 +616,32 @@ function renderHoje(){
       </div>
       ${blocosHoje.length? blocosHoje.map(b=>blocoHTML(b,dataHoje)).join('') :
         `<div class="empty"><span class="big">🗓️</span>Nenhum bloco pra hoje.<br><button class="btn quiet" onclick="nav('plano')">Montar meu cronograma →</button></div>`}
-    </div>`;
+    </div>
+
+    ${cardFaculdadeHTML()}`;
+}
+/* Card resumo da faculdade na tela Hoje — some fora da janela do semestre */
+function cardFaculdadeHTML(){
+  const h=hojeStr();
+  if(h>SEMESTRE.fim || h<addDias(SEMESTRE.inicio,-7)) return '';
+  const dia=diaSemana(), aulas=gradeDoDia(dia), evs=eventosDoDia(h);
+  const prova=proximaProva(), dProva=prova?diasAte(prova.data):null;
+
+  let linha;
+  if(ehFeriado(h)) linha=`🌴 ${esc(eventosDoDia(h).find(e=>e.tipo==='feriado').desc)} — sem aula`;
+  else if(!aulas.length) linha= h<SEMESTRE.inicio ? `Semestre começa em ${diasAte(SEMESTRE.inicio)} dias` : 'Sem aula hoje ✨';
+  else linha=aulas.map(g=>{const d=disciplina(g.disciplinaId); return `<span class="dot" style="background:${d.cor};display:inline-block;vertical-align:-1px"></span> ${esc(d.tag)} <span class="tag-mut">${g.inicio}</span>`;}).join(' · ');
+
+  const temas=evs.filter(e=>e.tipo!=='feriado');
+  return `<div class="card" onclick="nav('plano');planoView='faculdade';render()" style="cursor:pointer">
+    <div class="row" style="margin-bottom:4px">
+      <div class="grow" style="font-weight:700;font-size:15px">Faculdade · ${DIAS[dia]}</div>
+      <span class="tag-mut">${esc(SEMESTRE.nome)} ›</span>
+    </div>
+    <div style="font-size:13.5px;margin-bottom:${temas.length||dProva!==null?'6px':'0'}">${linha}</div>
+    ${temas.map(e=>`<div class="tag-mut" style="margin-top:2px">${ICONE_TIPO[e.tipo]||'📖'} ${esc(e.desc)}</div>`).join('')}
+    ${prova&&dProva<=14?`<div style="margin-top:8px;font-size:13px;font-weight:600;color:var(--brand)">📝 ${dProva===0?'Prova hoje':dProva===1?'Prova amanhã':'Próxima prova em '+dProva+' dias'} · ${esc(prova.desc)}</div>`:''}
+  </div>`;
 }
 function blocoHTML(b,data){
   const m=materia(b.materiaId), on=b.feito&&b.feito[data];
@@ -393,12 +663,24 @@ function toggleBloco(id,data){
 
 /* ================= TELA: PLANO ================= */
 let diaSel=diaSemana();
+let planoView='semana';      // 'semana' | 'faculdade'
+let filtroDisc=null;         // null = todas; senão Set de ids
+let mostrarPassado=false;
+function segHTML(){
+  return `<div class="seg">
+    <button class="${planoView==='semana'?'on':''}" onclick="planoView='semana';render()">Minha semana</button>
+    <button class="${planoView==='faculdade'?'on':''}" onclick="planoView='faculdade';render()">Grade da faculdade</button>
+  </div>`;
+}
 function renderPlano(){
+  if(planoView==='faculdade') return renderPlanoFaculdade();
   const blocos=S.blocos.filter(b=>b.dia===diaSel);
   $('#scr-plano').innerHTML=`
     <div class="eyebrow">Cronograma</div>
     <h1 class="h-page">Plano semanal</h1>
     <div class="sub">Monte sua semana ideal — ela se repete toda semana e você marca o que fez.</div>
+
+    ${segHTML()}
 
     <div class="days">${DIAS.map((d,i)=>`<button class="${i===diaSel?'on':''}" onclick="diaSel=${i};render()">${d}</button>`).join('')}</div>
 
@@ -458,6 +740,140 @@ function salvarBloco(){
   salvar(); fecharModal(); render(); toast('Bloco adicionado');
 }
 function removerBloco(id){ S.blocos=S.blocos.filter(b=>b.id!==id); salvar(); render(); }
+
+/* ================= TELA: PLANO › GRADE DA FACULDADE ================= */
+function discAtiva(id){ return !filtroDisc || filtroDisc.has(id); }
+function eventoVisivel(ev){
+  if(!filtroDisc) return true;
+  if(!ev.disciplinas.length) return true;          // feriados/eventos gerais sempre aparecem
+  return ev.disciplinas.some(d=>filtroDisc.has(d));
+}
+function toggleDisc(id){
+  if(!filtroDisc) filtroDisc=new Set(SEMESTRE.disciplinas.map(d=>d.id));
+  filtroDisc.has(id) ? filtroDisc.delete(id) : filtroDisc.add(id);
+  if(filtroDisc.size===SEMESTRE.disciplinas.length) filtroDisc=null;
+  render();
+}
+function toggleFeitoEvento(id){
+  S.semestre.feitos[id] ? delete S.semestre.feitos[id] : (S.semestre.feitos[id]=true, marcarAtividade());
+  salvar(); render();
+}
+function gradeTableHTML(){
+  const dias=[0,1,2,3,4];
+  return `<table class="grade-table">
+    <tr><th></th>${dias.map(d=>`<th>${DIAS[d]}</th>`).join('')}</tr>
+    ${SEMESTRE.faixas.map(([fi,ff])=>
+      `<tr><td class="grade-hora">${fi}<br>${ff}</td>${dias.map(d=>{
+        // uma aula ocupa a faixa se os intervalos se cruzam (HH:MM zero-padded compara como string)
+        const g=SEMESTRE.grade.find(x=>x.dia===d && x.inicio<ff && x.fim>fi);
+        if(!g) return '<td><div class="grade-vazio"></div></td>';
+        const disc=disciplina(g.disciplinaId);
+        return `<td><div class="grade-cell" style="background:${disc.cor};${discAtiva(disc.id)?'':'opacity:.25'}">${esc(disc.tag)}</div></td>`;
+      }).join('')}</tr>`).join('')}
+  </table>`;
+}
+const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+/* lista de eventos com um cabeçalho por mês */
+function timelineHTML(evs){
+  let mes=null;
+  return evs.map(ev=>{
+    const m=ev.data.slice(0,7);
+    const cab = m!==mes ? (mes=m, `<div class="tag-mut" style="font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:12px 0 2px">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</div>`) : '';
+    return cab + eventoHTML(ev);
+  }).join('');
+}
+function eventoHTML(ev){
+  const st=statusEvento(ev), feito=!!S.semestre.feitos[ev.id];
+  const chip = st==='hoje'?'<span class="chip sm">hoje</span>'
+    : st==='futuro'?`<span class="tag-mut">em ${diasAte(ev.data)}d</span>`:'';
+  const dots=ev.disciplinas.map(id=>{const d=disciplina(id); return d?`<span class="dot" style="background:${d.cor};display:inline-block;vertical-align:-1px"></span>`:'';}).join(' ');
+  const tags=ev.disciplinas.map(id=>{const d=disciplina(id); return d?esc(d.tag):'';}).filter(Boolean).join(' · ');
+  return `<div class="item ${st==='passou'&&!feito?'ev-passou':''}">
+    ${ev.tipo==='feriado'?'<div style="width:26px;text-align:center">🌴</div>'
+      :`<button class="check ${feito?'on':''}" onclick="toggleFeitoEvento('${ev.id}')">${feito?'✓':''}</button>`}
+    <div class="grow ${feito?'strike':''}">
+      <div style="font-weight:600;font-size:14px">${ICONE_TIPO[ev.tipo]||'📖'} ${esc(ev.desc)}</div>
+      <div class="tag-mut">${dots} ${tags} ${tags?'·':''} ${dataCurta(ev.data)} (${diaDaData(ev.data)})</div>
+    </div>
+    ${chip}
+  </div>`;
+}
+function renderPlanoFaculdade(){
+  const h=hojeStr(), todos=eventosOrdenados().filter(eventoVisivel);
+  const passados=todos.filter(e=>e.data<h), futuros=todos.filter(e=>e.data>=h);
+  const sem=semanaDoSemestre(), prova=proximaProva();
+
+  let banner;
+  if(h<SEMESTRE.inicio) banner=`Começa em ${diasAte(SEMESTRE.inicio)} dias · ${dataCurta(SEMESTRE.inicio)}`;
+  else if(h>SEMESTRE.fim) banner=`Semestre encerrado em ${dataCurta(SEMESTRE.fim)}`;
+  else banner=`Semana ${sem.atual} de ${sem.total} · termina ${dataCurta(SEMESTRE.fim)}`;
+
+  const aulasHoje=gradeDoDia(diaSemana()), feriadoHoje=ehFeriado(h);
+
+  $('#scr-plano').innerHTML=`
+    <div class="eyebrow">Cronograma</div>
+    <h1 class="h-page">Grade da faculdade</h1>
+    <div class="sub">${esc(SEMESTRE.nome)} · ${esc(SEMESTRE.periodo)} — ${banner}</div>
+
+    ${segHTML()}
+
+    ${prova?`<div class="card">
+      <div class="row">
+        <div class="grow">
+          <div style="font-weight:700;font-size:15px">Próxima prova</div>
+          <div class="tag-mut" style="margin-top:2px">${esc(prova.desc)}</div>
+          <div class="tag-mut">${dataCurta(prova.data)} (${diaDaData(prova.data)})</div>
+        </div>
+        <div class="chip">${diasAte(prova.data)===0?'hoje':diasAte(prova.data)===1?'amanhã':'em '+diasAte(prova.data)+'d'}</div>
+      </div>
+    </div>`:''}
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Hoje · ${DIAS[diaSemana()]}</div>
+      ${feriadoHoje? '<div class="tag-mut">🌴 Feriado — sem aula</div>'
+        : aulasHoje.length? aulasHoje.map(g=>{const d=disciplina(g.disciplinaId);
+            return `<div class="item"><span class="dot" style="background:${d.cor}"></span>
+              <div class="grow"><div style="font-weight:600;font-size:14px">${esc(d.tag)}</div>
+              <div class="tag-mut">${esc(d.nome)}</div></div>
+              <span class="tag-mut">${g.inicio}–${g.fim}</span></div>`;}).join('')
+        : '<div class="tag-mut">Sem aula hoje ✨</div>'}
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Grade semanal fixa</div>
+      <div class="tag-mut">Horário oficial das aulas — não é o seu plano de estudo.</div>
+      ${gradeTableHTML()}
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px">Filtrar por disciplina</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${SEMESTRE.disciplinas.map(d=>`<button class="chip sm ${discAtiva(d.id)?'':'off'}" style="border:none;font-family:inherit;cursor:pointer" onclick="toggleDisc('${d.id}')">
+          <span class="dot" style="background:${d.cor}"></span>${esc(d.tag)}</button>`).join('')}
+      </div>
+      ${filtroDisc?`<button class="btn quiet" style="margin-top:8px" onclick="filtroDisc=null;render()">Mostrar todas</button>`:''}
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:4px">
+        <div class="grow" style="font-weight:700;font-size:15px">O que vem</div>
+        <span class="tag-mut">${futuros.length}</span>
+      </div>
+      ${futuros.length? timelineHTML(futuros)
+        : '<div class="empty"><span class="big">🎉</span>Nada mais no cronograma — semestre concluído!</div>'}
+    </div>
+
+    ${passados.length?`<div class="card">
+      <button class="btn quiet" onclick="mostrarPassado=${!mostrarPassado};render()">
+        ${mostrarPassado?'Esconder':'Ver'} ${passados.length} evento${passados.length>1?'s':''} anterior${passados.length>1?'es':''}
+      </button>
+      ${mostrarPassado? timelineHTML(passados) : ''}
+    </div>`:''}
+
+    <div class="tag-mut" style="text-align:center;margin:6px 0 4px">
+      Conforme o ${esc(SEMESTRE.fonte)}.<br>Datas podem mudar — confirme no SAVA/SIA.
+    </div>`;
+}
 
 /* ================= TELA: CARDS (flashcards + SM-2) ================= */
 let deckSel=null;
@@ -1252,6 +1668,7 @@ function lerBackup(inp){
   const r=new FileReader();
   r.onload=()=>{ try{
     S=Object.assign(PADRAO(), JSON.parse(r.result));
+    garantirVersaoSemestre();
     salvar(); aplicarTema(); render(); toast('Backup restaurado 🎉');
   }catch(e){ toast('Arquivo inválido'); } };
   r.readAsText(f);
@@ -1299,6 +1716,7 @@ async function puxarSync(forcar){
       const codigo=S.sync.codigo;
       S=Object.assign(PADRAO(), remoto);
       S.sync=S.sync||{}; S.sync.codigo=codigo;
+      garantirVersaoSemestre();
       salvarLocal(); aplicarTema(); render();
       return true;
     }
@@ -1359,7 +1777,7 @@ function fimOnboarding(){
 }
 
 /* ================= INÍCIO ================= */
-carregar(); aplicarTema(); nav('hoje');
+carregar(); garantirVersaoSemestre(); aplicarTema(); nav('hoje');
 if(!S.onboarded) onboarding();
 if(!S.sync) S.sync={codigo:null};
 if(!S.sync.codigo && !S.sync.desativado){ S.sync.codigo=CODIGO_SYNC_FIXO; salvarLocal(); }
