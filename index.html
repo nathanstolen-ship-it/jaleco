@@ -566,6 +566,14 @@ function lerArquivoBuffer(file,aoProgredir){
     r.readAsArrayBuffer(file);
   });
 }
+/* Roda a mesma tarefa em N frentes ao mesmo tempo. O gargalo aqui e a latencia da rede
+   (um PUT por imagem), entao 6 frentes cortam o tempo total quase pelo mesmo fator. */
+const FRENTES=6;
+async function emParalelo(itens,limite,tarefa){
+  let prox=0;
+  const frente=async()=>{ while(prox<itens.length){ const i=prox++; await tarefa(itens[i]); } };
+  await Promise.all(Array.from({length:Math.min(limite,itens.length)},frente));
+}
 function tamanhoLegivel(b){ return b>=1048576? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
 function marcarAtividade(){ S.atividade[hojeStr()]=true; }
 
@@ -1201,15 +1209,17 @@ async function libsApkg(){
   return window._SQL;
 }
 /* Mídias (imagens) ficam no IndexedDB — comporta muito mais que o localStorage */
-let _mdb=null;
+let _mdbP=null;
 function mediaDB(){
-  return new Promise((res,rej)=>{
-    if(_mdb) return res(_mdb);
+  /* guarda a promessa, nao o resultado: varias chamadas simultaneas compartilham a mesma abertura */
+  if(_mdbP) return _mdbP;
+  _mdbP=new Promise((res,rej)=>{
     const rq=indexedDB.open('jaleco-media',1);
     rq.onupgradeneeded=()=>rq.result.createObjectStore('m');
-    rq.onsuccess=()=>{_mdb=rq.result;res(_mdb)};
-    rq.onerror=()=>rej(rq.error);
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>{ _mdbP=null; rej(rq.error); };
   });
+  return _mdbP;
 }
 async function mediaPut(k,blob){
   const db=await mediaDB();
@@ -1289,12 +1299,15 @@ async function enviarImagensNuvem(){
   progAbrir('Enviando imagens');
   let n=0;
   try{
-    for(let i=0;i<pend.length;i++){
-      progFase('Enviando para a nuvem…',i/pend.length,i+' de '+pend.length);
-      const b=await mediaGet(pend[i]);
-      if(b && await uparMidia(pend[i],b)) n++;
-      if(i%8===0) await respirar();
-    }
+    let feitas=0;
+    progFase('Enviando para a nuvem…',0,'0 de '+pend.length);
+    await emParalelo(pend,FRENTES,async k=>{
+      const b=await mediaGet(k);
+      if(b && await uparMidia(k,b)) n++;
+      feitas++;
+      progFase('Enviando para a nuvem…',feitas/pend.length,feitas+' de '+pend.length);
+      if(feitas%FRENTES===0) await respirar();
+    });
     progFase('Salvando…',1,'');
     salvar();
   } finally { _ocupado=false; progFechar(); }
@@ -1528,10 +1541,10 @@ async function importarApkg(deckId,file){
       Object.entries(mapa).forEach(([num,nome])=>nomeParaNum[nome]=num);
       const temSync=!!(S.sync&&S.sync.codigo);
       const rotulo=temSync?'Importando e enviando imagens…':'Importando imagens…';
-      const total=usadas.size;
+      const lista=[...usadas], total=lista.length, base=ate('libs','ler','cards');
       let feitas=0;
-      progFase(rotulo,ate('libs','ler','cards'),'0 de '+total);
-      for(const nome of usadas){
+      progFase(rotulo,base,'0 de '+total);
+      await emParalelo(lista,FRENTES,async nome=>{
         const num=nomeParaNum[nome];
         const arq=num!==undefined?zip.file(String(num)):null;
         if(arq){
@@ -1543,9 +1556,9 @@ async function importarApkg(deckId,file){
           if(temSync && await uparMidia(k,blob)) naNuvem++;
         } else faltando++;
         feitas++;
-        progFase(rotulo,ate('libs','ler','cards')+P.imgs*(feitas/total),feitas+' de '+total);
-        if(feitas%12===0) await respirar();
-      }
+        progFase(rotulo,base+P.imgs*(feitas/total),feitas+' de '+total);
+        if(feitas%FRENTES===0) await respirar();
+      });
     }
 
     progFase('Salvando…',1,'');
