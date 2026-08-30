@@ -187,6 +187,18 @@ nav svg{width:23px;height:23px}
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* Barra de progresso das operacoes longas (importar .apkg, enviar imagens) */
+.prog-bg{position:fixed;inset:0;background:rgba(30,20,28,.55);z-index:240;display:none;align-items:center;justify-content:center;padding:24px}
+.prog-bg.active{display:flex}
+.prog{background:var(--card);border-radius:24px;box-shadow:var(--shadow);padding:24px 22px;width:100%;max-width:380px;text-align:center}
+.prog h4{font-size:17px;margin-bottom:5px}
+.prog .fase{font-size:13.5px;color:var(--mut);line-height:1.35;min-height:19px}
+.prog .trilho{height:10px;border-radius:100px;background:var(--line);overflow:hidden;margin:16px 0 9px}
+.prog .barra{height:100%;width:0;border-radius:100px;background:var(--brand);transition:width .2s ease}
+.prog .trilho.indef .barra{width:38%;animation:desliza 1.15s ease-in-out infinite}
+@keyframes desliza{0%{margin-left:-38%}100%{margin-left:100%}}
+.prog .conta{font-size:12.5px;color:var(--mut);font-weight:600;font-variant-numeric:tabular-nums;min-height:16px}
+
 /* Pomodoro */
 .pomo-time{font-family:'Fraunces',serif;font-size:76px;font-weight:600;text-align:center;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .pomo-phase{text-align:center;font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
@@ -225,6 +237,14 @@ nav svg{width:23px;height:23px}
   <div class="modal" id="modal-box"></div>
 </div>
 
+<div class="prog-bg" id="prog-bg">
+  <div class="prog">
+    <h4 id="prog-tit">Importando</h4>
+    <div class="fase" id="prog-fase"></div>
+    <div class="trilho" id="prog-trilho"><div class="barra" id="prog-barra"></div></div>
+    <div class="conta" id="prog-conta"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
@@ -524,6 +544,29 @@ function semanaDoSemestre(){
   return {atual:Math.floor(-diasAte(SEMESTRE.inicio)/7)+1, total};
 }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('show'),2200); }
+/* Progresso das operacoes longas. frac null = barra indeterminada (nao da pra medir) */
+let _ocupado=false;
+function progAbrir(titulo){ $('#prog-tit').textContent=titulo; progFase('',null,''); $('#prog-bg').classList.add('active'); }
+function progFase(txt,frac,conta){
+  $('#prog-fase').textContent=txt||'';
+  $('#prog-conta').textContent=conta||'';
+  const tr=$('#prog-trilho'), b=$('#prog-barra');
+  if(frac==null){ tr.classList.add('indef'); b.style.width=''; }
+  else { tr.classList.remove('indef'); b.style.width=(Math.max(0,Math.min(1,frac))*100).toFixed(1)+'%'; }
+}
+function progFechar(){ $('#prog-bg').classList.remove('active'); }
+/* devolve o controle ao navegador pra barra realmente redesenhar */
+const respirar=()=>new Promise(r=>requestAnimationFrame(()=>r()));
+function lerArquivoBuffer(file,aoProgredir){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onprogress=e=>{ if(e.lengthComputable&&aoProgredir) aoProgredir(e.loaded/e.total); };
+    r.onload=()=>res(r.result);
+    r.onerror=()=>rej(r.error||new Error('não consegui ler o arquivo'));
+    r.readAsArrayBuffer(file);
+  });
+}
+function tamanhoLegivel(b){ return b>=1048576? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
 function marcarAtividade(){ S.atividade[hojeStr()]=true; }
 
 function streak(){
@@ -1143,7 +1186,7 @@ function importarTxt(deckId, texto){
 
 /* ---------- Importar .apkg (Anki) ---------- */
 let apkgDeck=null;
-function pedirApkg(deckId){ apkgDeck=deckId; $('#file-apkg').click(); }
+function pedirApkg(deckId){ if(_ocupado) return toast('Espere o import atual terminar'); apkgDeck=deckId; $('#file-apkg').click(); }
 function carregarScript(src){
   return new Promise((res,rej)=>{
     const s=document.createElement('script');
@@ -1241,10 +1284,20 @@ async function enviarImagensNuvem(){
   const ks=await mediaKeys();
   const pend=ks.filter(k=>!S.midias[k]);
   if(!pend.length) return toast('Todas as imagens já estão na nuvem ✓');
-  toast('Enviando '+pend.length+' imagens…');
+  if(_ocupado) return toast('Espere a operação atual terminar');
+  _ocupado=true;
+  progAbrir('Enviando imagens');
   let n=0;
-  for(const k of pend){ const b=await mediaGet(k); if(b && await uparMidia(k,b)) n++; }
-  salvar();
+  try{
+    for(let i=0;i<pend.length;i++){
+      progFase('Enviando para a nuvem…',i/pend.length,i+' de '+pend.length);
+      const b=await mediaGet(pend[i]);
+      if(b && await uparMidia(pend[i],b)) n++;
+      if(i%8===0) await respirar();
+    }
+    progFase('Salvando…',1,'');
+    salvar();
+  } finally { _ocupado=false; progFechar(); }
   toast(n===pend.length? n+' imagens na nuvem ☁️' : n+' de '+pend.length+' enviadas — tente de novo as restantes');
 }
 
@@ -1410,19 +1463,32 @@ function lerApkg(inp){
   importarApkg(apkgDeck,f);
 }
 async function importarApkg(deckId,file){
-  toast('Lendo o .apkg…');
+  if(_ocupado) return toast('Espere o import atual terminar');
+  _ocupado=true;
+  /* Pesos das etapas na barra: baixar libs, ler o arquivo, montar os cards, importar as imagens.
+     As imagens levam a maior parte do tempo num baralho grande, por isso ficam com 75%. */
+  const P={libs:.05, ler:.10, cards:.10, imgs:.75};
+  const ate=(...ks)=>ks.reduce((a,k)=>a+P[k],0);
+  progAbrir('Importando baralho');
   try{
+    progFase('Carregando o leitor de .apkg…',null,file.name+' · '+tamanhoLegivel(file.size));
     const SQL=await libsApkg();
-    const zip=await JSZip.loadAsync(file);
+
+    progFase('Lendo o arquivo…',ate('libs'),tamanhoLegivel(file.size));
+    const buf=await lerArquivoBuffer(file,f=>progFase('Lendo o arquivo…',ate('libs')+P.ler*f,tamanhoLegivel(file.size*f)+' de '+tamanhoLegivel(file.size)));
+    const zip=await JSZip.loadAsync(buf);
     const dbFile=zip.file('collection.anki21')||zip.file('collection.anki2');
     if(!dbFile){
+      progFechar();
       if(zip.file('collection.anki21b'))
         alert('Este .apkg está no formato mais novo do Anki. Ao exportar, marque a opção “Support older Anki versions” (compatível com versões antigas) e tente de novo.');
       else alert('Não encontrei um baralho Anki dentro deste arquivo.');
       return;
     }
-    const buf=await dbFile.async('uint8array');
-    const db=new SQL.Database(buf);
+
+    progFase('Abrindo o baralho…',ate('libs','ler'),'');
+    await respirar();
+    const db=new SQL.Database(await dbFile.async('uint8array'));
     const modelos=modelosApkg(db);
     /* Um card do app por card do Anki: respeita templates multiplos e cada lacuna do cloze */
     let linhas=[];
@@ -1435,26 +1501,36 @@ async function importarApkg(deckId,file){
       if(r.length) linhas=r[0].values;
     }
     db.close();
-    if(!linhas.length) return toast('Nenhuma nota encontrada no arquivo');
+    if(!linhas.length){ progFechar(); return toast('Nenhuma nota encontrada no arquivo'); }
+
     const usadas=new Set();
     let n=0, pulados=0;
-    for(const [ord,mid,flds] of linhas){
+    for(let i=0;i<linhas.length;i++){
+      const [ord,mid,flds]=linhas[i];
       let par=null;
       try{ par=cardDaNota(modelos[String(mid)], Number(ord)||0, String(flds).split('\u001f'), deckId, usadas); }
       catch(e){ console.warn('nota ignorada',e); }
       if(par&&par.frente&&par.verso){ S.cards.push(novoCardObj(deckId,par.frente,par.verso)); n++; }
       else pulados++;
+      if(i%200===0||i===linhas.length-1){
+        progFase('Montando os cards…',ate('libs','ler')+P.cards*((i+1)/linhas.length),(i+1)+' de '+linhas.length);
+        await respirar();
+      }
     }
+
     /* Midias: o arquivo "media" mapeia numeros -> nomes reais */
-    let imgs=0, naNuvem=0;
+    let imgs=0, naNuvem=0, faltando=0;
     if(usadas.size){
-      toast('Importando imagens…');
       let mapa={};
       const mf=zip.file('media');
       if(mf){ try{ mapa=JSON.parse(await mf.async('string')); }catch(e){} }
       const nomeParaNum={};
       Object.entries(mapa).forEach(([num,nome])=>nomeParaNum[nome]=num);
       const temSync=!!(S.sync&&S.sync.codigo);
+      const rotulo=temSync?'Importando e enviando imagens…':'Importando imagens…';
+      const total=usadas.size;
+      let feitas=0;
+      progFase(rotulo,ate('libs','ler','cards'),'0 de '+total);
       for(const nome of usadas){
         const num=nomeParaNum[nome];
         const arq=num!==undefined?zip.file(String(num)):null;
@@ -1465,15 +1541,25 @@ async function importarApkg(deckId,file){
           await mediaPut(k, blob);
           imgs++;
           if(temSync && await uparMidia(k,blob)) naNuvem++;
-          if(imgs%10===0) toast(imgs+' de '+usadas.size+' imagens…');
-        }
+        } else faltando++;
+        feitas++;
+        progFase(rotulo,ate('libs','ler','cards')+P.imgs*(feitas/total),feitas+' de '+total);
+        if(feitas%12===0) await respirar();
       }
     }
+
+    progFase('Salvando…',1,'');
     salvar(); render();
+    progFechar();
     toast(n? `${n} cards${imgs?` e ${imgs} imagens`:''} importados${naNuvem?` (${naNuvem} na nuvem ☁️)`:''}${pulados?` — ${pulados} sem conteúdo, pulados`:''} 🎉` : 'Nenhum card válido para importar');
+    if(faltando) console.warn(faltando+' imagens citadas nos cards não estavam no arquivo');
   }catch(e){
     console.error(e);
+    progFechar();
     alert('Não consegui importar este arquivo ('+(e&&e.message?e.message:e)+'). Verifique a internet (a leitura usa bibliotecas online) ou exporte de novo no Anki marcando “Support older Anki versions”.');
+  }finally{
+    _ocupado=false;
+    progFechar();
   }
 }
 
