@@ -259,7 +259,8 @@ nav svg{width:23px;height:23px}
 </div>
 <div class="toast" id="toast"></div>
 
-<input type="file" id="file-apkg" accept=".apkg,.zip" style="display:none" onchange="lerApkg(this)">
+<!-- sem accept de proposito: no iPhone/iPad o Safari cinza o .apkg, que nao tem UTI no sistema -->
+<input type="file" id="file-apkg" style="display:none" onchange="lerApkg(this)">
 <input type="file" id="file-txt" accept=".txt,.csv,.tsv" style="display:none" onchange="lerTxt(this)">
 
 <script>
@@ -1050,6 +1051,8 @@ function renderCards(){
         <button class="btn ghost small" onclick="iniciarImportar('txt')">.txt</button>
         <button class="btn ghost small" onclick="iniciarImportar('apkg')">.apkg (Anki)</button>
       </div>
+      <div class="tag-mut" style="margin-top:8px;font-size:11.5px">No iPhone/iPad o seletor mostra todos os arquivos — o .apkg costuma estar em <b>Downloads</b>.
+      </div>
     </div>
 
     <div class="card">
@@ -1528,6 +1531,8 @@ function cardDaNota(modelo,ord,campos,deckId,usadas){
 function lerApkg(inp){
   const f=inp.files[0]; inp.value='';
   if(!f||!apkgDeck) return;
+  if(!/\.(apkg|colpkg|zip)$/i.test(f.name))
+    return alert(`“${f.name}” não parece um baralho do Anki.\n\nEscolha o arquivo .apkg que você baixou (normalmente fica em Downloads).`);
   importarApkg(apkgDeck,f);
 }
 async function importarApkg(deckId,file){
