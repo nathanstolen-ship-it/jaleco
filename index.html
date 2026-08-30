@@ -137,6 +137,9 @@ nav svg{width:23px;height:23px}
 }
 .fcard .face-label{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
 .fimg{max-width:100%;max-height:36vh;border-radius:12px;margin:10px auto;display:block;object-fit:contain}
+.fimg-ov{position:relative;display:block;width:fit-content;max-width:100%;margin:10px auto;line-height:0}
+.fimg-ov>.fimg{margin:0;max-height:62vh} /* occlusão precisa de imagem grande p/ ler os rótulos */
+.fimg-ov>.fmask{position:absolute;left:0;top:0;width:100%;height:100%;margin:0;border-radius:12px;object-fit:fill;pointer-events:none}
 .grade{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .grade button{padding:13px 4px;border-radius:14px;font-weight:700;font-size:14px;color:#fff}
 .g0{background:#B3453F}.g3{background:#C08A2D}.g4{background:var(--ok)}.g5{background:#3E6B8C}
@@ -1252,7 +1255,7 @@ function limparHTML(html, deckId, usadas){
     if(deckId&&usadas){ usadas.add(src); return '\n[[img:'+deckId+'/'+src+']]\n'; }
     return '';
   });
-  t=t.replace(/<br\s*\/?>/gi,'\n').replace(/<\/(div|p|li)>/gi,'\n');
+  t=t.replace(/<(br|hr)\b[^>]*>/gi,'\n').replace(/<\/(div|p|li|tr|h[1-6])>/gi,'\n');
   const d=document.createElement('div'); d.innerHTML=t;
   return (d.textContent||'').replace(/\n{3,}/g,'\n\n').trim();
 }
@@ -1261,7 +1264,11 @@ function faceHTML(t){
   const keys=[];
   let s=String(t).replace(/\[\[img:([^\]]+)\]\]/g,(m,k)=>{keys.push(k);return '\u0001'+(keys.length-1)+'\u0001';});
   s=esc(s);
-  return s.replace(/\u0001(\d+)\u0001/g,(m,i)=>`<img class="fimg" data-mk="${esc(keys[i])}" alt="">`);
+  return s.replace(/\u0001(\d+)\u0001/g,(m,i)=>{
+    const [base,mascara]=String(keys[i]).split('||'); // occlusão: imagem + máscara sobreposta
+    if(mascara) return `<span class="fimg-ov"><img class="fimg" data-mk="${esc(base)}" alt=""><img class="fmask" data-mk="${esc(mascara)}" data-opc="1" alt=""></span>`;
+    return `<img class="fimg" data-mk="${esc(base)}" alt="">`;
+  });
 }
 function semImg(t){ return String(t).replace(/\[\[img:[^\]]+\]\]/g,'🖼️').replace(/\s+/g,' ').trim(); }
 let urlsAtivas=[];
@@ -1276,10 +1283,127 @@ async function hidratarImagens(root){
       img.src=url; // vem direto da nuvem
       fetch(url).then(r=>r.ok?r.blob():null).then(bl=>{ if(bl) mediaPut(k,bl); }).catch(()=>{}); // e vira cache local
     }
+    else if(img.dataset.opc) img.remove(); // máscara de occlusão ausente: mostra só a imagem
     else img.replaceWith(Object.assign(document.createElement('div'),{className:'tag-mut',textContent:'[imagem não encontrada]'}));
   }
 }
-const RX_CLOZE=/\{\{c\d+::(.*?)(?:::.*?)?\}\}/g;
+const RX_CLOZE=/\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g;
+function temCloze(t){ return /\{\{c\d+::/.test(String(t||'')); }
+/* Na frente a lacuna do card vira [...] (ou a dica); no verso, o texto revelado. As outras lacunas ficam sempre abertas. */
+function aplicarCloze(txt,ord,revelar){
+  const alvo=ord+1;
+  return String(txt).replace(RX_CLOZE,(m,i,conteudo,dica)=>{
+    if(Number(i)!==alvo) return conteudo;
+    return revelar?conteudo:'['+(dica||'…')+']';
+  });
+}
+function clozeNosCampos(val,ord,revelar){
+  const o={};
+  Object.keys(val).forEach(k=>{ o[k]=temCloze(val[k])?aplicarCloze(val[k],ord,revelar):val[k]; });
+  return o;
+}
+/* Modelos (note types) do .apkg: nomes dos campos + templates de cada card */
+function modelosApkg(db){
+  const modelos={};
+  try{
+    const r=db.exec('SELECT models FROM col');
+    const j=JSON.parse((r.length&&r[0].values.length?r[0].values[0][0]:'')||'{}');
+    Object.keys(j).forEach(id=>{
+      const m=j[id]||{};
+      modelos[String(id)]={
+        nome:m.name||'',
+        cloze:m.type===1,
+        campos:(m.flds||[]).slice().sort((a,b)=>a.ord-b.ord).map(f=>f.name),
+        tmpls:(m.tmpls||[]).slice().sort((a,b)=>a.ord-b.ord).map(t=>({q:t.qfmt||'',a:t.afmt||''}))
+      };
+    });
+  }catch(e){}
+  if(Object.keys(modelos).length) return modelos;
+  /* Anki novo: os modelos moram nas tabelas notetypes/fields (sem templates legiveis) */
+  try{
+    const nt=db.exec('SELECT id,name FROM notetypes');
+    const fl=db.exec('SELECT ntid,ord,name FROM fields');
+    if(nt.length) nt[0].values.forEach(([id,nome])=>modelos[String(id)]={nome:nome||'',cloze:/cloze/i.test(nome||''),campos:[],tmpls:[]});
+    if(fl.length) fl[0].values.forEach(([ntid,ord,nome])=>{ const m=modelos[String(ntid)]; if(m) m.campos[ord]=nome; });
+    Object.keys(modelos).forEach(k=>{ modelos[k].campos=modelos[k].campos.filter(x=>x!=null); });
+  }catch(e){}
+  return modelos;
+}
+/* Renderiza um template do Anki ({{Campo}}, {{#Campo}}...{{/Campo}}, {{^Campo}}...{{/Campo}}) */
+function renderTmpl(tpl,val){
+  let s=String(tpl||'').replace(/<script[\s\S]*?<\/script>/gi,'');
+  const secao=/\{\{([#^])([^}]+)\}\}([\s\S]*?)\{\{\/\2\}\}/g;
+  for(let i=0;i<12;i++){
+    const antes=s;
+    s=s.replace(secao,(m,tipo,campo,corpo)=>{
+      const bruto=val[campo.trim()]||'';
+      const cheio=!!(String(bruto).replace(/<[^>]*>/g,'').trim())||/<img|<object|<audio/i.test(bruto);
+      return (tipo==='#')===cheio?corpo:'';
+    });
+    if(s===antes) break;
+  }
+  s=s.replace(/\{\{FrontSide\}\}/g,''); // a frente ja aparece separada no app
+  return s.replace(/\{\{([^}#^/][^}]*)\}\}/g,(m,nome)=>{
+    const partes=nome.split(':').map(x=>x.trim());
+    const campo=partes.pop(), filtros=partes;
+    const v=val[campo];
+    if(v==null) return '';
+    if(filtros.some(f=>f==='type'||f==='tts')) return '';
+    return v;
+  });
+}
+function srcDaImagem(html){
+  const m=/<img[^>]*src=["']?([^"'\s>]+)["']?[^>]*>/i.exec(String(html||''));
+  if(!m) return '';
+  try{ return decodeURIComponent(m[1]); }catch(e){ return m[1]; }
+}
+/* Image Occlusion Enhanced: o campo 0 e um ID escondido - o card real e a imagem com a mascara por cima */
+function cardOcclusao(nomes,val,deckId,usadas){
+  if(!(nomes.indexOf('Image')>=0&&nomes.indexOf('Question Mask')>=0&&nomes.indexOf('Answer Mask')>=0)) return null;
+  const base=srcDaImagem(val['Image']), q=srcDaImagem(val['Question Mask']), a=srcDaImagem(val['Answer Mask']);
+  if(!base||!q) return null;
+  [base,q,a].forEach(x=>{ if(x) usadas.add(x); });
+  const txt=nm=>limparHTML(val[nm]||'',deckId,usadas);
+  const cab=txt('Header');
+  const extras=['Footer','Remarks','Sources','Extra 1','Extra 2'].map(txt).filter(Boolean);
+  const ov=m=>'[[img:'+deckId+'/'+base+'||'+deckId+'/'+m+']]';
+  return {
+    frente:[cab,ov(q)].filter(Boolean).join('\n'),
+    verso:[cab,ov(a||q)].concat(extras).filter(Boolean).join('\n')
+  };
+}
+/* Sem template utilizavel: 1o campo preenchido vira frente, o resto vira verso */
+function cardGenerico(campos,deckId,usadas){
+  const limpos=campos.map(c=>limparHTML(c,deckId,usadas)).filter(Boolean);
+  if(limpos.length<2) return null;
+  return {frente:limpos[0], verso:limpos.slice(1).join('\n\n')};
+}
+function cardDaNota(modelo,ord,campos,deckId,usadas){
+  const nomes=(modelo&&modelo.campos&&modelo.campos.length)?modelo.campos:campos.map((_,i)=>'Campo '+(i+1));
+  const val={}; nomes.forEach((nm,i)=>{ val[nm]=campos[i]||''; });
+  const io=cardOcclusao(nomes,val,deckId,usadas);
+  if(io) return io;
+  const cloze=!!(modelo&&modelo.cloze)||campos.some(temCloze);
+  if(cloze&&!new RegExp('\\{\\{c'+(ord+1)+'::').test(campos.join(''))) return null; // essa lacuna nao existe nesta nota
+  const tmpls=(modelo&&modelo.tmpls)||[];
+  const tpl=tmpls.length?(cloze?tmpls[0]:tmpls[Math.min(ord,tmpls.length-1)]):null;
+  if(tpl){
+    const vq=cloze?clozeNosCampos(val,ord,false):val;
+    const va=cloze?clozeNosCampos(val,ord,true):val;
+    const frente=limparHTML(renderTmpl(tpl.q,vq),deckId,usadas);
+    const verso=limparHTML(renderTmpl(tpl.a,va),deckId,usadas);
+    if(frente&&verso) return {frente,verso};
+    if(!frente&&/\{\{[#^]/.test(tpl.q)) return null; // template condicional: este card não existe nesta nota
+  }
+  if(cloze){
+    const i=campos.findIndex(temCloze);
+    if(i>=0) return {
+      frente:limparHTML(aplicarCloze(campos[i],ord,false),deckId,usadas),
+      verso:limparHTML(aplicarCloze(campos[i],ord,true),deckId,usadas)
+    };
+  }
+  return cardGenerico(campos,deckId,usadas);
+}
 function lerApkg(inp){
   const f=inp.files[0]; inp.value='';
   if(!f||!apkgDeck) return;
@@ -1299,24 +1423,29 @@ async function importarApkg(deckId,file){
     }
     const buf=await dbFile.async('uint8array');
     const db=new SQL.Database(buf);
-    const res=db.exec('SELECT flds FROM notes');
+    const modelos=modelosApkg(db);
+    /* Um card do app por card do Anki: respeita templates multiplos e cada lacuna do cloze */
+    let linhas=[];
+    try{
+      const r=db.exec('SELECT c.ord, n.mid, n.flds FROM cards c JOIN notes n ON n.id=c.nid ORDER BY n.id, c.ord');
+      if(r.length) linhas=r[0].values;
+    }catch(e){}
+    if(!linhas.length){
+      const r=db.exec('SELECT 0, mid, flds FROM notes');
+      if(r.length) linhas=r[0].values;
+    }
     db.close();
-    if(!res.length||!res[0].values.length) return toast('Nenhuma nota encontrada no arquivo');
+    if(!linhas.length) return toast('Nenhuma nota encontrada no arquivo');
     const usadas=new Set();
     let n=0, pulados=0;
-    res[0].values.forEach(([flds])=>{
-      const campos=String(flds).split('\u001f');
-      const c1=limparHTML(campos[0]||'',deckId,usadas), c2=limparHTML(campos[1]||'',deckId,usadas);
-      let frente,verso;
-      if(RX_CLOZE.test(c1)){ // nota cloze: frente com lacuna, verso revelado
-        frente=c1.replace(RX_CLOZE,'[…]');
-        verso=c1.replace(RX_CLOZE,'$1');
-      } else { frente=c1; verso=c2; }
-      RX_CLOZE.lastIndex=0;
-      if(frente&&verso){ S.cards.push(novoCardObj(deckId,frente,verso)); n++; }
+    for(const [ord,mid,flds] of linhas){
+      let par=null;
+      try{ par=cardDaNota(modelos[String(mid)], Number(ord)||0, String(flds).split('\u001f'), deckId, usadas); }
+      catch(e){ console.warn('nota ignorada',e); }
+      if(par&&par.frente&&par.verso){ S.cards.push(novoCardObj(deckId,par.frente,par.verso)); n++; }
       else pulados++;
-    });
-    /* Mídias: o arquivo "media" mapeia números → nomes reais */
+    }
+    /* Midias: o arquivo "media" mapeia numeros -> nomes reais */
     let imgs=0, naNuvem=0;
     if(usadas.size){
       toast('Importando imagens…');
@@ -1336,15 +1465,15 @@ async function importarApkg(deckId,file){
           await mediaPut(k, blob);
           imgs++;
           if(temSync && await uparMidia(k,blob)) naNuvem++;
-          if(imgs%10===0) toast(imgs+' imagens processadas…');
+          if(imgs%10===0) toast(imgs+' de '+usadas.size+' imagens…');
         }
       }
     }
     salvar(); render();
-    toast(n? `${n} cards${imgs?` e ${imgs} imagens`:''} importados${naNuvem?` (${naNuvem} na nuvem ☁️)`:''} 🎉` : 'Nenhum card válido para importar');
+    toast(n? `${n} cards${imgs?` e ${imgs} imagens`:''} importados${naNuvem?` (${naNuvem} na nuvem ☁️)`:''}${pulados?` — ${pulados} sem conteúdo, pulados`:''} 🎉` : 'Nenhum card válido para importar');
   }catch(e){
     console.error(e);
-    alert('Não consegui importar este arquivo. Verifique a internet (a leitura usa bibliotecas online) ou exporte de novo no Anki marcando “Support older Anki versions”.');
+    alert('Não consegui importar este arquivo ('+(e&&e.message?e.message:e)+'). Verifique a internet (a leitura usa bibliotecas online) ou exporte de novo no Anki marcando “Support older Anki versions”.');
   }
 }
 
