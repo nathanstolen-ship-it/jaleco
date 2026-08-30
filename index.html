@@ -63,6 +63,7 @@ label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 
 .btn.quiet{background:transparent;color:var(--brand);padding:10px}
 .btn.small{width:auto;padding:9px 14px;font-size:14px;border-radius:12px}
 .btn.danger{background:transparent;color:var(--danger)}
+.btn.perigo{background:var(--danger);color:#fff}
 
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:100px;background:var(--brand-soft);color:var(--brand)}
 .chip.off{opacity:.4}
@@ -136,6 +137,14 @@ nav svg{width:23px;height:23px}
   font-size:21px;line-height:1.45;overflow-y:auto;white-space:pre-wrap;
 }
 .fcard .face-label{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+/* Selo de estado do card: novo (nunca estudado) x revisao (ja estudado alguma vez) */
+.selo{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:100px;vertical-align:middle}
+.selo.novo{background:var(--brand-soft);color:var(--brand)}
+.selo.rev{background:var(--ok-soft);color:var(--ok)}
+.fcard .face-label .selo{margin-left:8px;letter-spacing:.1em}
+.rv-topo{display:flex;align-items:center;gap:8px}
+.rv-topo .btn.small{width:auto;flex:0 0 auto}
+.btn.icone{width:auto;flex:0 0 auto;padding:9px 11px;color:var(--danger);display:inline-flex;align-items:center}
 .fimg{max-width:100%;max-height:36vh;border-radius:12px;margin:10px auto;display:block;object-fit:contain}
 .fimg-ov{position:relative;display:block;width:fit-content;max-width:100%;margin:10px auto;line-height:0}
 .fimg-ov>.fimg{margin:0;max-height:62vh} /* occlusão precisa de imagem grande p/ ler os rótulos */
@@ -146,7 +155,7 @@ nav svg{width:23px;height:23px}
 .grade small{display:block;font-weight:500;font-size:10.5px;opacity:.85;margin-top:2px}
 
 /* Modal */
-.modal-bg{position:fixed;inset:0;background:rgba(30,20,28,.45);z-index:90;display:none;align-items:flex-end;justify-content:center}
+.modal-bg{position:fixed;inset:0;background:rgba(30,20,28,.45);z-index:110;display:none;align-items:flex-end;justify-content:center}
 .modal-bg.active{display:flex}
 .modal{background:var(--card);border-radius:24px 24px 0 0;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;padding:22px 20px calc(26px + env(safe-area-inset-bottom));animation:up .25s ease}
 @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
@@ -223,10 +232,13 @@ nav svg{width:23px;height:23px}
 
 <!-- ============ REVISÃO (overlay) ============ -->
 <div class="overlay" id="review">
-  <div class="row">
+  <div class="rv-topo">
     <button class="btn small ghost" onclick="fecharReview()">Sair</button>
-    <div class="grow" style="text-align:center;font-weight:700" id="rv-count"></div>
+    <div class="grow" style="text-align:center;font-weight:700;font-size:13px;line-height:1.3" id="rv-count"></div>
     <button class="btn small ghost" onclick="pularCard()">Pular</button>
+    <button class="btn quiet icone" onclick="excluirCardAtual()" aria-label="Excluir este card" title="Excluir este card">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    </button>
   </div>
   <div class="fcard" id="rv-card" onclick="virarCard()"></div>
   <div id="rv-actions"></div>
@@ -487,8 +499,14 @@ const PADRAO = () => ({
 function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
 function salvar(){ S.atualizadoEm=Date.now(); salvarLocal(); agendarPush(); }
 function carregar(){
-  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); return; } }catch(e){}
+  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); migrarCards(); return; } }catch(e){}
   S = PADRAO();
+}
+/* Cards salvos antes de existir o campo `visto`: quem ja tem historico de acerto conta
+   como revisao. Um card reprovado logo na estreia volta a aparecer como novo — sem
+   guardar o passado, nao da pra distinguir, e errar de novo nao custa nada. */
+function migrarCards(){
+  (S.cards||[]).forEach(c=>{ if(c.visto===undefined) c.visto = c.reps>0 || c.intervalo>0; });
 }
 
 /* ================= HELPERS ================= */
@@ -612,6 +630,16 @@ function render(){
 /* ================= MODAL ================= */
 function abrirModal(html){ $('#modal-box').innerHTML='<div class="handle"></div>'+html; $('#modal-bg').classList.add('active'); }
 function fecharModal(){ $('#modal-bg').classList.remove('active'); }
+/* Confirmacao no estilo do app. Fica acima da tela de revisao, entao serve durante o estudo. */
+let _confirmAcao=null;
+function confirmarSheet({titulo,texto,rotulo,perigo,aoConfirmar}){
+  _confirmAcao=aoConfirmar;
+  abrirModal(`<h3>${esc(titulo)}</h3>
+    <p class="sub" style="margin-top:6px;white-space:pre-wrap">${esc(texto)}</p>
+    <button class="btn${perigo?' perigo':''}" style="margin-top:18px" onclick="confirmarOk()">${esc(rotulo)}</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="fecharModal()">Cancelar</button>`);
+}
+function confirmarOk(){ const f=_confirmAcao; _confirmAcao=null; fecharModal(); if(f) f(); }
 
 /* ================= TELA: HOJE ================= */
 function ecgSVG(){
@@ -660,7 +688,7 @@ function renderHoje(){
       <div class="row">
         <div class="grow">
           <div style="font-weight:700;font-size:15px">Revisão espaçada</div>
-          <div class="tag-mut">${venc? venc+' card'+(venc>1?'s':'')+' esperando você':'Tudo em dia por hoje ✨'}</div>
+          <div class="tag-mut">${venc? venc+' card'+(venc>1?'s':'')+' esperando você'+(resumoFila(cardsVencidos())?` · ${resumoFila(cardsVencidos())}`:''):'Tudo em dia por hoje ✨'}</div>
         </div>
         ${venc?'<button class="btn small" onclick="event.stopPropagation();iniciarReview()">Revisar</button>':''}
       </div>
@@ -992,7 +1020,7 @@ function renderCards(){
     <div class="sub">No estilo Anki: acertos afastam o card, erros trazem de volta.</div>
 
     ${venc.length?`<div class="card"><div class="row">
-      <div class="grow"><div style="font-weight:700">Fila de hoje</div><div class="tag-mut">${venc.length} card${venc.length>1?'s':''} para revisar</div></div>
+      <div class="grow"><div style="font-weight:700">Fila de hoje</div><div class="tag-mut">${venc.length} card${venc.length>1?'s':''} · ${resumoFila(venc)}</div></div>
       <button class="btn small" onclick="iniciarReview()">Revisar agora</button>
     </div></div>`:''}
 
@@ -1000,17 +1028,18 @@ function renderCards(){
       <div style="font-weight:700;font-size:15px;margin-bottom:4px">Meus baralhos</div>
       ${S.decks.map(d=>{
         const cs=S.cards.filter(c=>c.deckId===d.id);
-        const dv=cs.filter(c=>c.due<=hojeStr()).length;
+        const devidos=cs.filter(c=>c.due<=hojeStr());
+        const dv=devidos.length, cn=contarFila(cs).novos;
         return `<div class="item" style="flex-direction:column;align-items:stretch;gap:10px">
           <div class="row">
             <div class="grow"><div style="font-weight:600">${esc(d.nome)}</div>
-            <div class="tag-mut">${cs.length} cards${dv?` · <b style="color:var(--brand)">${dv} vencidos</b>`:''}</div></div>
+            <div class="tag-mut">${cs.length} cards${cn?` · ${cn} novo${cn>1?'s':''}`:''}${dv?` · <b style="color:var(--brand)">${dv} na fila</b>`:''}</div></div>
             <button class="btn quiet" style="width:auto;color:var(--danger);padding:8px" onclick="removerDeck('${d.id}')" aria-label="Excluir baralho">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
             </button>
           </div>
           <div class="row" style="gap:8px">
-            ${dv?`<button class="btn small" style="flex:1" onclick="iniciarReview('${d.id}')">Estudar (${dv})</button>`:''}
+            ${dv?`<button class="btn small" style="flex:1" onclick="iniciarReview('${d.id}')" title="${esc(resumoFila(devidos))}">Estudar (${dv})</button>`:''}
             <button class="btn small ghost" style="flex:1" onclick="deckSel='${d.id}';render()">Ver cards</button>
           </div>
         </div>`;
@@ -1043,23 +1072,27 @@ function listaCardsHTML(id){
       ? `<div class="empty">Nenhum card encontrado para "${esc(buscaCard)}".</div>`
       : '<div class="empty">Baralho vazio. Adicione cards ou cole uma lista gerada pelo Claude.</div>';
   }
-  return filtrados.map(c=>`<div class="item">
+  return filtrados.map(c=>{
+    const novo=ehNovo(c);
+    return `<div class="item">
     <div class="grow"><div style="font-weight:600;font-size:14.5px">${esc(semImg(c.frente))}</div>
     <div class="tag-mut">${esc(semImg(c.verso).slice(0,80))}${semImg(c.verso).length>80?'…':''}</div>
-    <div class="tag-mut" style="font-size:11px">próxima: ${c.due<=hojeStr()?'hoje':c.due.split('-').reverse().join('/')}</div></div>
+    <div class="tag-mut" style="font-size:11px;margin-top:3px"><span class="selo ${novo?'novo':'rev'}">${novo?'Novo':'Revisão'}</span>
+      ${novo?'ainda não estudado':'próxima: '+(c.due<=hojeStr()?'hoje':c.due.split('-').reverse().join('/'))}</div></div>
     <button class="btn quiet" style="width:auto" onclick="removerCard('${c.id}')">✕</button>
-  </div>`).join('');
+  </div>`;}).join('');
 }
 function renderListaCards(id){ $('#lista-cards').innerHTML=listaCardsHTML(id); }
 function renderDeck(id){
   if(id!==_deckAbertoAnterior){ buscaCard=''; _deckAbertoAnterior=id; }
   const d=S.decks.find(x=>x.id===id);
   const cs=S.cards.filter(c=>c.deckId===id);
-  const dv=cs.filter(c=>c.due<=hojeStr()).length;
+  const devidos=cs.filter(c=>c.due<=hojeStr());
+  const dv=devidos.length;
   $('#scr-cards').innerHTML=`
     <button class="btn quiet" style="padding-left:0" onclick="deckSel=null;render()">‹ Baralhos</button>
     <h1 class="h-page">${esc(d.nome)}</h1>
-    <div class="sub">${cs.length} cards · ${dv} vencidos hoje</div>
+    <div class="sub">${cs.length} cards · ${dv} na fila de hoje${dv?` (${resumoFila(devidos)})`:''}</div>
     ${dv?`<button class="btn" style="margin-top:14px" onclick="iniciarReview('${id}')">Revisar este baralho (${dv})</button>`:''}
     <div class="row" style="margin-top:12px;gap:8px">
       <button class="btn ghost" onclick="modalCard('${id}')">+ Card</button>
@@ -1127,7 +1160,19 @@ function removerDeck(id){
   deckSel=null; salvar(); render();
 }
 function novoCardObj(deckId,frente,verso){
-  return {id:uid(),deckId,frente,verso,ease:2.5,intervalo:0,reps:0,due:hojeStr()};
+  return {id:uid(),deckId,frente,verso,ease:2.5,intervalo:0,reps:0,due:hojeStr(),visto:false};
+}
+/* Card novo = nunca estudado. Errar NAO devolve o card pra fila de novos: o SM-2 zera
+   `reps` a cada erro, mas `visto` fica marcado pra sempre depois da primeira resposta. */
+function ehNovo(c){ return !c.visto; }
+function contarFila(cs){
+  let novos=0, rev=0;
+  cs.forEach(c=>ehNovo(c)?novos++:rev++);
+  return {novos, rev, total:cs.length};
+}
+function resumoFila(cs){
+  const {novos,rev}=contarFila(cs);
+  return [novos?novos+' novo'+(novos>1?'s':''):'', rev?rev+' revisão'+(rev>1?'ões':''):''].filter(Boolean).join(' · ');
 }
 function modalCard(deckId){
   abrirModal(`<h3>Novo card</h3>
@@ -1142,7 +1187,17 @@ function salvarCard(deckId){
   salvar(); $('#in-fr').value=''; $('#in-vs').value=''; $('#in-fr').focus();
   toast('Card criado — pode adicionar outro'); render();
 }
-function removerCard(id){ S.cards=S.cards.filter(c=>c.id!==id); salvar(); render(); }
+function removerCard(id){
+  const c=S.cards.find(x=>x.id===id);
+  if(!c) return;
+  const texto=semImg(c.frente);
+  confirmarSheet({
+    titulo:'Excluir este card?',
+    texto:`“${texto.slice(0,90)}${texto.length>90?'…':''}”\n\nEle sai do baralho de vez. Não dá pra desfazer.`,
+    rotulo:'Excluir card', perigo:true,
+    aoConfirmar(){ S.cards=S.cards.filter(x=>x.id!==id); salvar(); render(); toast('Card excluído'); }
+  });
+}
 function modalImport(deckId){
   abrirModal(`<h3>Colar em lote</h3>
     <p class="sub" style="margin-top:4px">Cole uma linha por card no formato <b>frente ; verso</b> (ou separado por tab). É exatamente o formato que o prompt “Gerar flashcards” pede ao Claude.</p>
@@ -1580,9 +1635,12 @@ async function importarApkg(deckId,file){
 let fila=[], cardAtual=null, mostrandoVerso=false, revStats=null, historico=[];
 function iniciarReview(deckId){
   const h=hojeStr();
-  fila=S.cards.filter(c=>c.due<=h && (!deckId||c.deckId===deckId));
-  if(!fila.length) return toast('Nada vencido por aqui ✨');
-  fila.sort(()=>Math.random()-.5);
+  const devidos=S.cards.filter(c=>c.due<=h && (!deckId||c.deckId===deckId));
+  if(!devidos.length) return toast('Nada vencido por aqui ✨');
+  /* Primeiro o que ja foi estudado e venceu, depois o material novo — se a sessao for
+     interrompida, o que estava prestes a ser esquecido ja passou. */
+  const baralhar=a=>a.sort(()=>Math.random()-.5);
+  fila=baralhar(devidos.filter(c=>!ehNovo(c))).concat(baralhar(devidos.filter(ehNovo)));
   revStats={total:0,acertos:0};
   historico=[];
   $('#review').classList.add('active');
@@ -1591,18 +1649,26 @@ function iniciarReview(deckId){
 function proximoCard(){
   if(!fila.length) return fimReview();
   cardAtual=fila.shift(); mostrandoVerso=false;
-  $('#rv-count').textContent=(fila.length+1)+' na fila';
+  atualizarContador();
   desenharCard();
+}
+function atualizarContador(){
+  const restantes=cardAtual?[cardAtual,...fila]:fila.slice();
+  const detalhe=resumoFila(restantes);
+  $('#rv-count').innerHTML=`${restantes.length} na fila${detalhe?`<div class="tag-mut" style="font-weight:600">${detalhe}</div>`:''}`;
 }
 function pularCard(){
   if(!cardAtual) return;
   if(!fila.length) return toast('Só sobrou esse card por aqui');
   fila.push(cardAtual); // manda pro fim da fila de hoje, sem mexer no agendamento — pra revisar o que já estudou primeiro
+  cardAtual=null;
   proximoCard();
 }
 function desenharCard(){
   const texto=mostrandoVerso?cardAtual.verso:cardAtual.frente;
-  $('#rv-card').innerHTML=`<div style="width:100%"><div class="face-label">${mostrandoVerso?'Resposta':'Pergunta'}</div>${faceHTML(texto)}</div>`;
+  const novo=ehNovo(cardAtual);
+  const selo=`<span class="selo ${novo?'novo':'rev'}">${novo?'Novo':'Revisão'}</span>`;
+  $('#rv-card').innerHTML=`<div style="width:100%"><div class="face-label">${mostrandoVerso?'Resposta':'Pergunta'}${selo}</div>${faceHTML(texto)}</div>`;
   hidratarImagens($('#rv-card'));
   $('#rv-actions').innerHTML= (mostrandoVerso
     ? `<div class="grade">
@@ -1648,10 +1714,11 @@ function prevInt(q){
   return r.intervalo===1?'1 dia':r.intervalo+' dias';
 }
 function avaliar(q){
-  const estadoAnterior={ease:cardAtual.ease, intervalo:cardAtual.intervalo, reps:cardAtual.reps, due:cardAtual.due};
+  const estadoAnterior={ease:cardAtual.ease, intervalo:cardAtual.intervalo, reps:cardAtual.reps, due:cardAtual.due, visto:cardAtual.visto};
   const cardId=cardAtual.id;
   const r=calcSM2(cardAtual,q);
   Object.assign(cardAtual,r);
+  cardAtual.visto=true; // respondeu uma vez: daqui pra frente e card de revisao, mesmo tendo errado
   revStats.total++;
   if(q>=4) revStats.acertos++;
   let requeued=false;
@@ -1685,9 +1752,30 @@ function desfazerUltima(){
   salvar();
   if(cardAtual) fila.unshift(cardAtual);
   cardAtual=card; mostrandoVerso=true;
-  $('#rv-count').textContent=(fila.length+1)+' na fila';
+  atualizarContador();
   desenharCard();
   toast('Desfeito — avalie de novo');
+}
+/* Baralho importado pronto sempre traz card que nao interessa. Da pra tirar sem sair da sessao. */
+function excluirCardAtual(){
+  if(!cardAtual) return;
+  const alvo=cardAtual, resumo=semImg(alvo.frente).slice(0,90);
+  confirmarSheet({
+    titulo:'Excluir este card?',
+    texto:`“${esc(resumo)}${semImg(alvo.frente).length>90?'…':''}”\n\nEle sai do baralho de vez. Não dá pra desfazer.`,
+    rotulo:'Excluir card',
+    perigo:true,
+    aoConfirmar(){
+      S.cards=S.cards.filter(c=>c.id!==alvo.id);
+      fila=fila.filter(c=>c.id!==alvo.id);
+      historico=historico.filter(h=>h.cardId!==alvo.id); // nao da pra desfazer nota de card apagado
+      salvar();
+      cardAtual=null;
+      toast('Card excluído');
+      if(!fila.length) return fimReview();
+      proximoCard();
+    }
+  });
 }
 function fimReview(){
   $('#review').classList.remove('active');
