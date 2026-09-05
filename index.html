@@ -168,6 +168,24 @@ nav svg{width:23px;height:23px}
 .bars .fill{width:100%;max-width:34px;border-radius:8px 8px 4px 4px;background:var(--brand);min-height:3px;transition:height .5s ease}
 .bars .lbl{font-size:11px;font-weight:600;color:var(--mut)}
 
+/* Gráfico de cards estudados por dia (barras empilhadas: novos + revisões) */
+.chart{display:flex;align-items:flex-end;height:120px;margin-top:14px;
+  border-bottom:1px solid var(--line);padding-bottom:2px}
+.chart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;
+  min-width:0;border-radius:3px 3px 0 0;overflow:hidden}
+.chart .col.vazio{background:var(--line);height:2px;align-self:flex-end;border-radius:2px}
+.chart .rev{background:var(--brand);min-height:2px}
+.chart .nov{background:var(--gold);min-height:2px}
+.chart-eixo{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;
+  font-weight:600;color:var(--mut)}
+.chart-eixo b{color:var(--brand)}
+.legenda{display:flex;gap:14px;margin-top:12px;font-size:12px;color:var(--mut);font-weight:600}
+.legenda i{width:10px;height:10px;border-radius:3px;display:inline-block;vertical-align:-1px;margin-right:5px}
+.seg{display:flex;gap:6px;margin-top:12px}
+.seg button{flex:1;padding:7px 0;border-radius:10px;border:1px solid var(--line);
+  background:transparent;color:var(--mut);font-size:12.5px;font-weight:600}
+.seg button.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand)}
+
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 .stat{background:var(--card);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 .stat .n{font-family:'Fraunces',serif;font-size:28px;font-weight:600;color:var(--brand)}
@@ -603,6 +621,9 @@ function streak(){
   return n;
 }
 function cardsVencidos(){ const h=hojeStr(); return S.cards.filter(c=>c.due<=h); }
+/* Respostas dadas hoje, contando o card que voltou pra fila depois de um erro — é assim
+   que o Anki conta "cards estudados hoje". */
+function cardsEstudadosHoje(){ const r=S.reviews[hojeStr()]; return r?r.total:0; }
 function aplicarTema(){
   const t = TEMAS[S.tema]||TEMAS.vinho, r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--card',t.card); r.setProperty('--ink',t.ink);
@@ -663,7 +684,7 @@ function saudacao(){
   return h<5?'Boa madrugada':h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
 }
 function renderHoje(){
-  const st=streak(), venc=cardsVencidos().length;
+  const st=streak(), venc=cardsVencidos().length, feitosHoje=cardsEstudadosHoje();
   const hoje=diaSemana(), dataHoje=hojeStr();
   const blocosHoje=S.blocos.filter(b=>b.dia===hoje);
   const feitos=blocosHoje.filter(b=>b.feito&&b.feito[dataHoje]).length;
@@ -693,6 +714,9 @@ function renderHoje(){
         </div>
         ${venc?'<button class="btn small" onclick="event.stopPropagation();iniciarReview()">Revisar</button>':''}
       </div>
+      ${feitosHoje?`<div class="tag-mut" style="margin-top:10px;cursor:pointer"
+        onclick="event.stopPropagation();maisView='progresso';nav('mais')">
+        ✅ ${feitosHoje} card${feitosHoje>1?'s':''} estudado${feitosHoje>1?'s':''} hoje · ver progresso →</div>`:''}
     </div>
 
     <div class="card">
@@ -1730,8 +1754,10 @@ function avaliar(q){
   if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); requeued=true; }
   else cardAtual.due=addDias(hojeStr(),r.intervalo);
   const h=hojeStr();
-  S.reviews[h]=S.reviews[h]||{total:0,acertos:0};
+  S.reviews[h]=S.reviews[h]||{total:0,acertos:0,novos:0};
   S.reviews[h].total++; if(q>=4) S.reviews[h].acertos++;
+  /* estreia do card conta como "novo" do dia, como no Anki */
+  if(!estadoAnterior.visto) S.reviews[h].novos=(S.reviews[h].novos||0)+1;
   marcarAtividade(); salvar();
   historico.push({cardId, estadoAnterior, q, requeued, diaReview:h});
   proximoCard();
@@ -1752,6 +1778,7 @@ function desfazerUltima(){
   if(rd){
     rd.total=Math.max(0,rd.total-1);
     if(h.q>=4) rd.acertos=Math.max(0,rd.acertos-1);
+    if(!h.estadoAnterior.visto) rd.novos=Math.max(0,(rd.novos||0)-1);
     if(rd.total===0) delete S.reviews[h.diaReview];
   }
   salvar();
@@ -1935,12 +1962,57 @@ function copiarPrompt(i){
     ()=>{ prompt('Copie o texto:', txt); }
   );
 }
+/* ---------- Cards estudados por dia (no estilo das estatísticas do Anki) ---------- */
+let statsDias=14;
+const PERIODOS=[{d:14,l:'14 dias'},{d:30,l:'30 dias'},{d:90,l:'3 meses'}];
+/* Uma entrada por dia do período, inclusive os dias sem estudo — o buraco no gráfico
+   é informação. `novos` só existe a partir desta versão; dia antigo conta tudo como revisão. */
+function serieReviews(dias){
+  const h=hojeStr(), out=[];
+  for(let i=dias-1;i>=0;i--){
+    const d=addDias(h,-i), r=S.reviews[d]||{};
+    const total=r.total||0;
+    out.push({data:d, total, acertos:r.acertos||0, novos:Math.min(r.novos||0,total), hoje:d===h});
+  }
+  return out;
+}
+function ddmm(s){ const [,m,d]=s.split('-'); return `${d}/${m}`; }
+function graficoCardsHTML(serie){
+  const max=Math.max(1,...serie.map(p=>p.total));
+  const cols=serie.map(p=>{
+    const t=`${ddmm(p.data)} — ${p.total} card${p.total===1?'':'s'}`;
+    if(!p.total) return `<div class="col vazio" title="${t}"></div>`;
+    const rev=p.total-p.novos, alt=v=>(100*v/max).toFixed(2)+'%';
+    return `<div class="col" title="${t}${p.novos?` (${p.novos} novo${p.novos>1?'s':''})`:''}">
+      ${p.novos?`<div class="nov" style="height:${alt(p.novos)}"></div>`:''}
+      ${rev?`<div class="rev" style="height:${alt(rev)}"></div>`:''}
+    </div>`;
+  }).join('');
+  const meio=serie[Math.floor(serie.length/2)];
+  /* barra fina precisa de respiro; com 90 colunas o vão come a barra */
+  const gap=serie.length<=14?3:serie.length<=30?2:1;
+  return `<div class="chart" style="gap:${gap}px">${cols}</div>
+    <div class="chart-eixo"><span>${ddmm(serie[0].data)}</span><span>${ddmm(meio.data)}</span><b>hoje ▾</b></div>
+    <div class="legenda">
+      <span><i style="background:var(--brand)"></i>revisões</span>
+      <span><i style="background:var(--gold)"></i>cards novos</span>
+      ${serie.some(p=>p.total)?`<span style="margin-left:auto">pico: ${max}/dia</span>`:''}
+    </div>`;
+}
 function renderProgresso(){
   const h=hojeStr();
   const totalMin=S.sessoes.reduce((a,s)=>a+s.min,0);
   const totalRev=Object.values(S.reviews).reduce((a,r)=>a+r.total,0);
   const totalAc=Object.values(S.reviews).reduce((a,r)=>a+r.acertos,0);
   const ret=totalRev?Math.round(100*totalAc/totalRev):0;
+  const serie=serieReviews(statsDias);
+  const pTotal=serie.reduce((a,p)=>a+p.total,0);
+  const pAcertos=serie.reduce((a,p)=>a+p.acertos,0);
+  const pNovos=serie.reduce((a,p)=>a+p.novos,0);
+  const pDias=serie.filter(p=>p.total>0).length;
+  const pRet=pTotal?Math.round(100*pAcertos/pTotal):0;
+  const media=(pTotal/statsDias).toFixed(pTotal/statsDias<10?1:0).replace('.',',');
+  const hojeN=cardsEstudadosHoje();
   const barras=[];
   for(let i=0;i<7;i++){
     const d=dataDoDia(i);
@@ -1957,6 +2029,28 @@ function renderProgresso(){
       <div class="stat"><div class="n">${totalRev}</div><div class="l">cards revisados</div></div>
       <div class="stat"><div class="n">${ret}%</div><div class="l">retenção geral</div></div>
     </div>
+
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div style="font-weight:700;font-size:15px">Cards estudados</div>
+          <div class="tag-mut">${hojeN? `${hojeN} hoje` : 'nada estudado hoje ainda'}</div>
+        </div>
+      </div>
+      <div class="seg">${PERIODOS.map(p=>`<button class="${statsDias===p.d?'on':''}"
+        onclick="statsDias=${p.d};render()">${p.l}</button>`).join('')}</div>
+      ${graficoCardsHTML(serie)}
+      ${pTotal?`<div class="item" style="border:0;padding:12px 0 0">
+          <div class="grow"><b>${pTotal}</b> card${pTotal>1?'s':''} no período
+            <span class="tag-mut">${pNovos} novo${pNovos===1?'':'s'} · ${pTotal-pNovos} revis${pTotal-pNovos===1?'ão':'ões'}</span></div>
+        </div>
+        <div class="item" style="border:0;padding:2px 0 0">
+          <div class="grow"><b>${media}</b> por dia
+            <span class="tag-mut">estudou em ${pDias} de ${statsDias} dias · ${pRet}% de retenção</span></div>
+        </div>`
+      :`<p class="sub" style="margin-top:12px">Nenhuma revisão nesse período ainda. Assim que você estudar seus primeiros cards, eles aparecem aqui.</p>`}
+    </div>
+
     <div class="card">
       <div style="font-weight:700;font-size:15px">Foco nesta semana</div>
       <div class="bars">${barras.map(b=>`<div class="b">
