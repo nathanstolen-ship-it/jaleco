@@ -515,17 +515,27 @@ const PADRAO = () => ({
   semestre:{versao:SEMESTRE.id, feitos:{}}
 });
 
-function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
-function salvar(){ S.atualizadoEm=Date.now(); salvarLocal(); agendarPush(); }
+let _avisouMemoria=false;
+function salvarLocal(){
+  try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }
+  catch(e){
+    /* memória do navegador cheia: avisar, senão o que ela fizer some ao fechar o app */
+    if(!_avisouMemoria){ _avisouMemoria=true; toast('A memória deste aparelho para o Jaleco encheu — o que não sincronizar pode se perder'); }
+  }
+}
+function salvar(){ S.atualizadoEm=Date.now(); carimbar(); salvarLocal(); agendarPush(); }
 function carregar(){
-  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); migrarCards(); return; } }catch(e){}
-  S = PADRAO();
+  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); migrarCards(); fotografar(); return; } }catch(e){}
+  S = PADRAO(); fotografar();
 }
 /* Cards salvos antes de existir o campo `visto`: quem ja tem historico de acerto conta
    como revisao. Um card reprovado logo na estreia volta a aparecer como novo — sem
-   guardar o passado, nao da pra distinguir, e errar de novo nao custa nada. */
-function migrarCards(){
-  (S.cards||[]).forEach(c=>{ if(c.visto===undefined) c.visto = c.reps>0 || c.intervalo>0; });
+   guardar o passado, nao da pra distinguir, e errar de novo nao custa nada.
+   Sessões de foco antigas ganham id derivado do conteúdo (igual em todo aparelho),
+   para a sincronização saber que são a mesma sessão. */
+function migrarCards(E=S){
+  (E.cards||[]).forEach(c=>{ if(c.visto===undefined) c.visto = c.reps>0 || c.intervalo>0; });
+  (E.sessoes||[]).forEach((s,i)=>{ if(!s.id) s.id='s'+i+'-'+s.data+'-'+s.min+'-'+(s.materiaId||''); });
 }
 
 /* ================= HELPERS ================= */
@@ -1879,7 +1889,7 @@ function fimFase(){
   clearInterval(pomo.timer); pomo.rodando=false;
   bip();
   if(pomo.fase==='foco'){
-    S.sessoes.push({data:hojeStr(), min:S.pomo.foco, materiaId:pomo.materiaId||null});
+    S.sessoes.push({id:uid(), data:hojeStr(), min:S.pomo.foco, materiaId:pomo.materiaId||null});
     marcarAtividade(); salvar();
     toast('Foco concluído! Merecida pausa ☕');
     pomo.fase='pausa'; pomo.restam=S.pomo.pausa*60;
@@ -2088,11 +2098,12 @@ function renderAjustes(){
           <button class="btn small ghost" onclick="copiarCodigo()">Copiar</button>
         </div>
         <div class="row" style="gap:8px;margin-top:10px">
-          <button class="btn ghost" onclick="puxarSync(true).then(ok=>toast(ok?'Atualizado ✓':'Você já está com a versão mais recente'))">Sincronizar agora</button>
+          <button class="btn ghost" onclick="sincronizarAgora()">Sincronizar agora</button>
           <button class="btn danger" style="width:auto" onclick="desativarSync()">Desativar neste aparelho</button>
         </div>
         <button class="btn ghost" style="margin-top:10px" onclick="enviarImagensNuvem()">Enviar imagens deste aparelho ☁️</button>
         <p class="sub" style="margin-top:10px;font-size:12.5px">Imagens importadas com a sincronização ativa já sobem sozinhas. Use o botão acima para enviar as que foram importadas antes.</p>
+        <p class="sub" style="margin-top:6px;font-size:12.5px">${usoNuvemTexto()}</p>
       ` : `
         <p class="sub" style="margin:4px 0 12px">Guarde seus dados na nuvem e use no iPhone e no iPad ao mesmo tempo. Sem conta, sem senha — só um código secreto.</p>
         <button class="btn" onclick="ativarSync()">Ativar neste aparelho</button>
@@ -2131,7 +2142,9 @@ function lerBackup(inp){
   const f=inp.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=()=>{ try{
+    const sync=S.sync; // o backup não troca o grupo de sincronização deste aparelho
     S=Object.assign(PADRAO(), JSON.parse(r.result));
+    S.sync=sync; migrarCards();
     garantirVersaoSemestre();
     salvar(); aplicarTema(); render(); toast('Backup restaurado 🎉');
   }catch(e){ toast('Arquivo inválido'); } };
@@ -2144,71 +2157,211 @@ function apagarTudo(){
 }
 
 /* ================= SINCRONIZAÇÃO ENTRE APARELHOS ================= */
-/* Estratégia: o estado inteiro (sem imagens) vai para /api/sync sob um código
-   secreto. Quem tem o timestamp mais novo vence (last-write-wins).
-   O código é fixo e embutido no app (linha abaixo) — qualquer aparelho que
+/* O código é fixo e embutido no app (linha abaixo) — qualquer aparelho que
    abrir este app entra automaticamente no mesmo grupo de sincronização,
-   sem precisar ativar nem digitar nada.                                     */
+   sem precisar ativar nem digitar nada.
+
+   Estratégia: mesclar ITEM POR ITEM, nunca trocar o estado inteiro. O estado é
+   quebrado em unidades (cada card, baralho, matéria, bloco, sessão, dia de revisão,
+   imagem, marcação do semestre e cada ajuste solto). S._t guarda quando cada unidade
+   mudou pela última vez e S._x guarda lápides de exclusão. Ao sincronizar, vence a
+   mudança mais recente DAQUELA unidade, não o aparelho que salvou por último.
+   (Antes era "o estado mais novo vence": a Gabi revisando um card num aparelho que
+   ainda não tinha os baralhos novos apagava esses baralhos da nuvem e dos outros.)
+   A gravação é compara-e-grava: se outro aparelho gravou no meio do caminho, o
+   servidor responde 409 e este aparelho mescla de novo antes de tentar outra vez. */
 const CODIGO_SYNC_FIXO = 'jaleco-7fk3-9mq2-x8p1r5';
-let _pushTimer=null, _sincronizando=false;
+const LIMITE_NUVEM = 2000000; // o mesmo teto do api/sync.js
+const LISTAS=['decks','cards','materias','blocos','sessoes'];
+const MAPAS=['reviews','atividade','midias'];
+const FORA_DO_SYNC=['sync','atualizadoEm','_t','_x','semestre'];
+const LAPIDE_DIAS=180; // aparelho parado mais que isso pode ressuscitar o que foi apagado
+
+function unidades(E){
+  const u=new Map();
+  LISTAS.forEach(l=>(E[l]||[]).forEach(o=>{ if(o&&o.id) u.set(l+'/'+o.id,o); }));
+  MAPAS.forEach(m=>Object.entries(E[m]||{}).forEach(([k,v])=>u.set(m+'/'+k,v)));
+  Object.entries((E.semestre&&E.semestre.feitos)||{}).forEach(([k,v])=>u.set('feitos/'+k,v));
+  Object.keys(E).forEach(k=>{
+    if(!LISTAS.includes(k)&&!MAPAS.includes(k)&&!FORA_DO_SYNC.includes(k)&&E[k]!==undefined) u.set('$/'+k,E[k]);
+  });
+  return u;
+}
+/* Descobre o que mudou desde o último carimbo comparando com uma foto em memória —
+   assim nenhum ponto do app que mexe em S precisa lembrar de marcar a data. */
+let _foto=null, _mudancas=0;
+function fotografar(){ _foto=new Map(); unidades(S).forEach((v,k)=>_foto.set(k,JSON.stringify(v))); }
+function carimbar(){
+  if(!_foto) return fotografar();
+  const agora=Date.now(), atual=new Map();
+  unidades(S).forEach((v,k)=>atual.set(k,JSON.stringify(v)));
+  S._t=S._t||{}; S._x=S._x||{};
+  let mudou=false;
+  atual.forEach((j,k)=>{ if(_foto.get(k)!==j){ S._t[k]=agora; delete S._x[k]; mudou=true; } });
+  _foto.forEach((j,k)=>{ if(!atual.has(k)){ S._x[k]=agora; delete S._t[k]; mudou=true; } });
+  _foto=atual;
+  if(mudou){ _mudancas++; if(S.sync) S.sync.pendente=true; }
+}
+const mesmo=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function mesclar(R){
+  carimbar(); // o que mudou aqui entra na comparação com carimbo próprio
+  const uL=unidades(S), uR=unidades(R);
+  const tL=S._t||{}, xL=S._x||{}, tR=R._t||{}, xR=R._x||{};
+  const remotoMaisNovo=(R.atualizadoEm||0)>(S.atualizadoEm||0);
+  const chaves=new Set([...uL.keys(),...uR.keys(),...Object.keys(xL),...Object.keys(xR)]);
+  const t={}, x={}, vence=new Map(), velha=Date.now()-LAPIDE_DIAS*864e5;
+  let mudouAqui=false, faltaLa=false;
+  for(const k of chaves){
+    const temL=uL.has(k), temR=uR.has(k);
+    const sL=temL?(tL[k]||0):-1, sR=temR?(tR[k]||0):-1; // 0 = dado de antes dos carimbos
+    const morte=Math.max(xL[k]||0, xR[k]||0);
+    if(morte && morte>=Math.max(sL,sR)){
+      if(morte>velha) x[k]=morte;
+      if(temL) mudouAqui=true;
+      if(temR || (xR[k]||0)!==morte) faltaLa=true;
+      continue;
+    }
+    /* Presente só de um lado e sem lápide = criado lá e ainda não visto aqui: fica.
+       Empate de carimbo só acontece com dados antigos: vale o aparelho mais recente. */
+    const usarR = !temL ? true : !temR ? false : sL!==sR ? sR>sL : remotoMaisNovo;
+    const v=usarR?uR.get(k):uL.get(k), s=Math.max(sL,sR);
+    if(s>0) t[k]=s;
+    vence.set(k,{v,deR:usarR});
+    if(usarR && (!temL || !mesmo(uL.get(k),v))) mudouAqui=true;
+    if(!temR || (!usarR && !mesmo(uR.get(k),v)) || (tR[k]||0)!==s || xR[k]) faltaLa=true;
+  }
+  /* Aplica no próprio S preservando a identidade dos objetos: a revisão em andamento
+     guarda referências aos cards, e uma troca de objeto faria a nota dela sumir. */
+  LISTAS.forEach(l=>{
+    const nova=[], postos=new Set();
+    (S[l]||[]).forEach(o=>{
+      const k=l+'/'+(o&&o.id), w=vence.get(k);
+      if(!w||postos.has(k)) return;
+      if(w.deR && !mesmo(o,w.v)){ Object.keys(o).forEach(c=>delete o[c]); Object.assign(o,w.v); }
+      postos.add(k); nova.push(o);
+    });
+    (R[l]||[]).forEach(o=>{
+      const k=l+'/'+(o&&o.id), w=vence.get(k);
+      if(w&&!postos.has(k)){ postos.add(k); nova.push(w.v); }
+    });
+    S[l]=nova;
+  });
+  const feitos={};
+  MAPAS.forEach(m=>S[m]={});
+  vence.forEach((w,k)=>{
+    const i=k.indexOf('/'), grupo=k.slice(0,i), nome=k.slice(i+1);
+    if(MAPAS.includes(grupo)) S[grupo][nome]=w.v;
+    else if(grupo==='feitos') feitos[nome]=w.v;
+    else if(grupo==='$') S[nome]=w.v;
+  });
+  Object.keys(S).forEach(k=>{
+    if(!LISTAS.includes(k)&&!MAPAS.includes(k)&&!FORA_DO_SYNC.includes(k)&&!vence.has('$/'+k)) delete S[k];
+  });
+  S.semestre=Object.assign({versao:SEMESTRE.id}, S.semestre, {feitos});
+  S._t=t; S._x=x;
+  S.atualizadoEm=Math.max(S.atualizadoEm||0, R.atualizadoEm||0);
+  migrarCards(); garantirVersaoSemestre();
+  fotografar();
+  return {mudouAqui, faltaLa};
+}
+
+let _pushTimer=null, _syncAtual=null, _syncDeNovo=false, _avisouCheia=false;
+const urlSync=()=>'/api/sync?c='+encodeURIComponent(S.sync.codigo);
 function agendarPush(){
   if(!S.sync||!S.sync.codigo) return;
   clearTimeout(_pushTimer);
-  _pushTimer=setTimeout(empurrarSync, 2500);
+  _pushTimer=setTimeout(sincronizar, 3000);
 }
-async function empurrarSync(){
-  if(!S.sync||!S.sync.codigo||_sincronizando) return;
-  try{
-    _sincronizando=true;
-    const r=await fetch('/api/sync?c='+encodeURIComponent(S.sync.codigo),{
-      method:'PUT', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({estado:S})
-    });
-    if(r.status===413) toast('Dados grandes demais para sincronizar — exporte um backup');
-  }catch(e){ /* offline: fica só local, tenta na próxima */ }
-  finally{ _sincronizando=false; }
+/* Uma rodada por vez; pedido feito no meio de uma rodada vira mais uma rodada no fim.
+   Resolve true se trouxe novidade de outro aparelho. */
+function sincronizar(){
+  if(!S.sync||!S.sync.codigo) return Promise.resolve(false);
+  if(_ocupado){ agendarPush(); return Promise.resolve(false); } // import no meio: espera terminar
+  if(_syncAtual){ _syncDeNovo=true; return _syncAtual; }
+  _syncAtual=rodadaSync().catch(()=>false).finally(()=>{
+    _syncAtual=null;
+    if(_syncDeNovo){ _syncDeNovo=false; sincronizar(); }
+  });
+  return _syncAtual;
 }
-async function puxarSync(forcar){
-  if(!S.sync||!S.sync.codigo) return false;
-  try{
-    const r=await fetch('/api/sync?c='+encodeURIComponent(S.sync.codigo));
-    if(!r.ok) return false;
-    const j=await r.json();
-    const remoto=j&&j.estado;
-    if(!remoto) return false;
-    if(forcar || (remoto.atualizadoEm||0)>(S.atualizadoEm||0)){
-      const codigo=S.sync.codigo;
-      S=Object.assign(PADRAO(), remoto);
-      S.sync=S.sync||{}; S.sync.codigo=codigo;
-      garantirVersaoSemestre();
-      salvarLocal(); aplicarTema(); render();
-      return true;
+async function rodadaSync(){
+  let trouxe=false;
+  for(let tentativa=0; tentativa<4; tentativa++){
+    /* 1) a nuvem mudou desde a última vez? (consulta barata, só a versão) */
+    const rv=await fetch(urlSync()+'&so=rev',{cache:'no-store'});
+    if(!rv.ok) return trouxe;
+    const {rev}=await rv.json();
+    if(rev!==S.sync.rev){
+      const r=await fetch(urlSync(),{cache:'no-store'});
+      if(!r.ok) return trouxe;
+      const j=await r.json();
+      if(j.estado){
+        migrarCards(j.estado);
+        const m=mesclar(j.estado);
+        if(m.faltaLa) S.sync.pendente=true;
+        if(m.mudouAqui){ trouxe=true; aplicarTema(); render(); }
+      } else S.sync.pendente=true; // nuvem vazia: este aparelho vira o ponto de partida
+      S.sync.rev=j.rev;
+      salvarLocal();
     }
-  }catch(e){}
-  return false;
+    carimbar();
+    if(!S.sync.pendente) return trouxe;
+    /* 2) envia — o servidor só aceita se ninguém gravou desde a versão que mesclamos */
+    const marca=_mudancas;
+    const {sync, ...estado}=S;
+    const w=await fetch(urlSync(),{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({estado, base:S.sync.rev||''})
+    });
+    if(w.status===409) continue; // outro aparelho gravou no meio: mescla de novo
+    if(w.status===413){ avisarNuvemCheia(); return trouxe; }
+    if(!w.ok) return trouxe;
+    const k=await w.json();
+    S.sync.rev=k.rev; S.sync.tamanho=k.tamanho;
+    if(marca===_mudancas) S.sync.pendente=false; // mexeu durante o envio? vai na próxima rodada
+    salvarLocal();
+    return trouxe;
+  }
+  return trouxe;
+}
+function avisarNuvemCheia(){
+  if(_avisouCheia) return; _avisouCheia=true;
+  toast('A nuvem do Jaleco encheu — o que for feito agora fica só neste aparelho');
+}
+function usoNuvemTexto(){
+  const n=(S.sync&&S.sync.tamanho)||JSON.stringify(S).length;
+  const porCard=S.cards.length ? n/S.cards.length : 520;
+  const cabem=Math.max(0,Math.floor((LIMITE_NUVEM-n)/porCard/50)*50);
+  return `Espaço na nuvem: ${tamanhoLegivel(n)} de ${tamanhoLegivel(LIMITE_NUVEM)} (${Math.round(100*n/LIMITE_NUVEM)}%) — cabem ainda uns ${cabem.toLocaleString('pt-BR')} cards.`;
+}
+async function sincronizarAgora(){
+  toast('Sincronizando…');
+  S.sync.rev=null; // força baixar a nuvem e mesclar, mesmo sem novidade aparente
+  const trouxe=await sincronizar();
+  toast(S.sync.pendente ? 'Não consegui falar com a nuvem — tento de novo sozinho' : trouxe ? 'Atualizado ✓' : 'Tudo em dia ✓');
+  render();
 }
 function gerarCodigo(){
   const p=()=>Math.random().toString(36).slice(2,6);
   return 'jaleco-'+p()+'-'+p()+'-'+p();
 }
 async function ativarSync(){
-  S.sync.codigo=CODIGO_SYNC_FIXO; S.sync.desativado=false;
+  Object.assign(S.sync,{codigo:CODIGO_SYNC_FIXO, desativado:false, rev:null, pendente:true});
   salvarLocal();
   toast('Buscando seus dados…');
-  const achou=await puxarSync();
-  if(!achou) salvar();
+  await sincronizar();
   render();
   toast('Sincronização ativada ✓');
 }
 async function entrarComCodigo(){
   const c=($('#sync-cod').value||'').trim().toLowerCase();
   if(c.length<8) return toast('Código muito curto');
-  S.sync.codigo=c; S.sync.desativado=false; salvarLocal();
+  Object.assign(S.sync,{codigo:c, desativado:false, rev:null, pendente:true});
+  salvarLocal();
   toast('Buscando seus dados…');
-  const achou=await puxarSync(true);
-  if(achou) toast('Aparelho sincronizado 🎉');
-  else{ salvar(); toast('Código novo registrado — este aparelho virou a origem'); }
+  await sincronizar();
   render();
+  toast('Aparelho sincronizado 🎉');
 }
 function desativarSync(){
   if(!confirm('Desativar a sincronização neste aparelho? Os dados locais continuam intactos, mas vão parar de ir pra nuvem até você reativar.')) return;
@@ -2218,7 +2371,13 @@ function copiarCodigo(){
   navigator.clipboard&&navigator.clipboard.writeText(S.sync.codigo);
   toast('Código copiado');
 }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) puxarSync(); });
+/* Voltou pro app: busca novidades. Saiu do app: tenta mandar o que ficou pendente já,
+   sem esperar o intervalo — se não der tempo, sobe na próxima vez que abrir. */
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden) return sincronizar();
+  if(S.sync&&S.sync.pendente){ clearTimeout(_pushTimer); sincronizar(); }
+});
+window.addEventListener('online',()=>sincronizar());
 
 
 /* ================= ONBOARDING ================= */
@@ -2240,12 +2399,12 @@ function fimOnboarding(){
 
 /* ================= INÍCIO ================= */
 carregar(); garantirVersaoSemestre(); aplicarTema(); nav('hoje');
-if(!S.onboarded) onboarding();
 if(!S.sync) S.sync={codigo:null};
 if(!S.sync.codigo && !S.sync.desativado){ S.sync.codigo=CODIGO_SYNC_FIXO; salvarLocal(); }
-// puxa a versão mais recente da nuvem; se não havia nada lá ainda (1º aparelho
-// a usar o código), empurra o estado local pra servir de ponto de partida
-puxarSync().then(achouRemoto => { if(!achouRemoto) salvar(); });
+// mescla com a nuvem: traz o que os outros aparelhos fizeram e sobe o que ficou pendente aqui.
+// As boas-vindas esperam essa primeira ida à nuvem: num aparelho novo os dados dela chegam
+// antes, e o onboarding não cria matérias padrão por cima das que ela já tem.
+sincronizar().finally(()=>{ if(!S.onboarded) onboarding(); });
 </script>
 </body>
 </html>
