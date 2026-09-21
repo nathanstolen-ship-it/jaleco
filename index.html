@@ -508,7 +508,7 @@ let S = null;
 const PADRAO = () => ({
   nome:'Gabi', tema:'vinho',
   pomo:{foco:25, pausa:5},
-  materias:[], blocos:[], decks:[], cards:[],
+  materias:[], blocos:[], decks:[], pastas:[], cards:[],
   sessoes:[], reviews:{}, atividade:{},
   onboarded:false,
   sync:{codigo:null, desativado:false}, atualizadoEm:0, midias:{},
@@ -518,7 +518,7 @@ const PADRAO = () => ({
 function salvarLocal(){ try{ localStorage.setItem('jaleco2', JSON.stringify(S)); }catch(e){} }
 function salvar(){ S.atualizadoEm=Date.now(); salvarLocal(); agendarPush(); }
 function carregar(){
-  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); migrarCards(); return; } }catch(e){}
+  try{ const raw = localStorage.getItem('jaleco2'); if(raw){ S = Object.assign(PADRAO(), JSON.parse(raw)); migrarCards(); migrarDecks(); return; } }catch(e){}
   S = PADRAO();
 }
 /* Cards salvos antes de existir o campo `visto`: quem ja tem historico de acerto conta
@@ -526,6 +526,16 @@ function carregar(){
    guardar o passado, nao da pra distinguir, e errar de novo nao custa nada. */
 function migrarCards(){
   (S.cards||[]).forEach(c=>{ if(c.visto===undefined) c.visto = c.reps>0 || c.intervalo>0; });
+}
+/* Baralhos salvos antes das pastas: entram como soltos e ativos. Se a pasta sumiu em
+   outro aparelho, o baralho volta pra lista solta em vez de virar fantasma. */
+function migrarDecks(){
+  if(!Array.isArray(S.pastas)) S.pastas=[];
+  const ids=new Set(S.pastas.map(p=>p.id));
+  (S.decks||[]).forEach(d=>{
+    if(d.arquivado===undefined) d.arquivado=false;
+    if(d.pastaId===undefined || (d.pastaId && !ids.has(d.pastaId))) d.pastaId=null;
+  });
 }
 
 /* ================= HELPERS ================= */
@@ -620,7 +630,19 @@ function streak(){
   while(S.atividade[d]){ n++; d=addDias(d,-1); }
   return n;
 }
-function cardsVencidos(){ const h=hojeStr(); return S.cards.filter(c=>c.due<=h); }
+/* ---- baralhos: pastas e arquivamento ---- */
+function deckPorId(id){ return S.decks.find(d=>d.id===id); }
+function pastaPorId(id){ return id?(S.pastas||[]).find(p=>p.id===id):null; }
+function decksAtivos(){ return S.decks.filter(d=>!d.arquivado); }
+function decksArquivados(){ return S.decks.filter(d=>d.arquivado); }
+function decksDaPasta(pastaId){ return decksAtivos().filter(d=>(d.pastaId||null)===(pastaId||null)); }
+/* Arquivar tira o baralho da fila do dia sem apagar nada: os cards guardam data, ease e
+   historico, entao desarquivar devolve tudo exatamente como estava. */
+function cardsDeDecksAtivos(){
+  const arq=new Set(decksArquivados().map(d=>d.id));
+  return S.cards.filter(c=>!arq.has(c.deckId));
+}
+function cardsVencidos(){ const h=hojeStr(); return cardsDeDecksAtivos().filter(c=>c.due<=h); }
 /* Respostas dadas hoje, contando o card que voltou pra fila depois de um erro — é assim
    que o Anki conta "cards estudados hoje". */
 function cardsEstudadosHoje(){ const r=S.reviews[hojeStr()]; return r?r.total:0; }
@@ -710,9 +732,9 @@ function renderHoje(){
       <div class="row">
         <div class="grow">
           <div style="font-weight:700;font-size:15px">Revisão espaçada</div>
-          <div class="tag-mut">${venc? venc+' card'+(venc>1?'s':'')+' esperando você'+(resumoFila(cardsVencidos())?` · ${resumoFila(cardsVencidos())}`:''):'Tudo em dia por hoje ✨'}</div>
+          <div class="tag-mut">${venc? venc+' card'+(venc>1?'s':'')+' esperando você'+(resumoFila(cardsVencidos())?` · ${resumoFila(cardsVencidos())}`:''):'Tudo em dia por hoje ✨ Dá pra estudar extra em qualquer baralho.'}</div>
         </div>
-        ${venc?'<button class="btn small" onclick="event.stopPropagation();iniciarReview()">Revisar</button>':''}
+        ${venc?'<button class="btn small" onclick="event.stopPropagation();iniciarReview()">Revisar</button>':'<span style="color:var(--mut)">›</span>'}
       </div>
       ${feitosHoje?`<div class="tag-mut" style="margin-top:10px;cursor:pointer"
         onclick="event.stopPropagation();maisView='progresso';nav('mais')">
@@ -1050,25 +1072,14 @@ function renderCards(){
     </div></div>`:''}
 
     <div class="card">
-      <div style="font-weight:700;font-size:15px;margin-bottom:4px">Meus baralhos</div>
-      ${S.decks.map(d=>{
-        const cs=S.cards.filter(c=>c.deckId===d.id);
-        const devidos=cs.filter(c=>c.due<=hojeStr());
-        const dv=devidos.length, cn=contarFila(cs).novos;
-        return `<div class="item" style="flex-direction:column;align-items:stretch;gap:10px">
-          <div class="row">
-            <div class="grow"><div style="font-weight:600">${esc(d.nome)}</div>
-            <div class="tag-mut">${cs.length} cards${cn?` · ${cn} novo${cn>1?'s':''}`:''}${dv?` · <b style="color:var(--brand)">${dv} na fila</b>`:''}</div></div>
-            <button class="btn quiet" style="width:auto;color:var(--danger);padding:8px" onclick="removerDeck('${d.id}')" aria-label="Excluir baralho">
-              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-            </button>
-          </div>
-          <div class="row" style="gap:8px">
-            ${dv?`<button class="btn small" style="flex:1" onclick="iniciarReview('${d.id}')" title="${esc(resumoFila(devidos))}">Estudar (${dv})</button>`:''}
-            <button class="btn small ghost" style="flex:1" onclick="deckSel='${d.id}';render()">Ver cards</button>
-          </div>
-        </div>`;
-      }).join('')||`<div class="empty"><span class="big">🃏</span>Crie seu primeiro baralho — por matéria ou por tema.</div>`}
+      <div class="row" style="margin-bottom:2px">
+        <div class="grow" style="font-weight:700;font-size:15px">Meus baralhos</div>
+        <button class="btn quiet small" style="width:auto;padding:6px 8px" onclick="modalPasta()">+ Pasta</button>
+      </div>
+      ${(S.pastas||[]).map(p=>pastaHTML(p)).join('')}
+      ${decksDaPasta(null).map(d=>deckItemHTML(d)).join('')}
+      ${(!decksAtivos().length&&!(S.pastas||[]).length)?`<div class="empty"><span class="big">🃏</span>Crie seu primeiro baralho — por matéria ou por tema.</div>`:''}
+      ${(!decksAtivos().length&&(S.pastas||[]).length)?`<div class="empty">Nenhum baralho ativo. Crie um novo ou desarquive um lá embaixo.</div>`:''}
       <button class="btn ghost" style="margin-top:12px" onclick="modalDeck()">+ Novo baralho</button>
       <div class="row" style="margin-top:8px;gap:8px">
         <button class="btn ghost small" onclick="iniciarImportar('lote')">Colar em lote</button>
@@ -1079,12 +1090,194 @@ function renderCards(){
       </div>
     </div>
 
+    ${decksArquivados().length?`<div class="card">
+      <div class="row" style="cursor:pointer" onclick="mostrarArquivados=!mostrarArquivados;render()">
+        <span style="font-size:19px">📦</span>
+        <div class="grow"><div style="font-weight:700;font-size:15px">Arquivados</div>
+        <div class="tag-mut">${decksArquivados().length} baralho${decksArquivados().length>1?'s':''} fora da fila de hoje</div></div>
+        <span style="color:var(--mut)">${mostrarArquivados?'⌄':'›'}</span>
+      </div>
+      ${mostrarArquivados?decksArquivados().map(d=>deckItemHTML(d)).join(''):''}
+    </div>`:''}
+
     <div class="card">
       <div style="font-weight:700;font-size:15px">Dica de ouro 💡</div>
       <p class="sub" style="margin-top:4px">Peça ao seu Claude flashcards prontos e cole aqui em segundos. O modelo de pedido está na aba <b>Mais → Estudar com Claude</b>.</p>
     </div>`;
 }
-let buscaCard='', _deckAbertoAnterior=null;
+let buscaCard='', _deckAbertoAnterior=null, mostrarArquivados=false;
+
+/* ---------- Pastas e baralhos na lista ---------- */
+const ICONE_OPCOES='<svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
+
+function deckItemHTML(d){
+  const cs=S.cards.filter(c=>c.deckId===d.id);
+  const devidos=cs.filter(c=>c.due<=hojeStr());
+  const dv=devidos.length, cn=contarFila(cs).novos, arq=!!d.arquivado;
+  const naFila=!arq&&dv;
+  return `<div class="item" style="flex-direction:column;align-items:stretch;gap:10px">
+    <div class="row">
+      <div class="grow"><div style="font-weight:600">${esc(d.nome)}</div>
+      <div class="tag-mut">${cs.length} card${cs.length===1?'':'s'}${cn?` · ${cn} novo${cn>1?'s':''}`:''}${naFila?` · <b style="color:var(--brand)">${dv} na fila</b>`:''}${arq?' · arquivado':''}</div></div>
+      <button class="btn quiet" style="width:auto;color:var(--mut);padding:8px" onclick="modalOpcoesDeck('${d.id}')" aria-label="Opções do baralho" title="Opções">${ICONE_OPCOES}</button>
+    </div>
+    <div class="row" style="gap:8px">
+      ${naFila?`<button class="btn small" style="flex:1" onclick="iniciarReview('${d.id}')" title="${esc(resumoFila(devidos))}">Estudar (${dv})</button>`:''}
+      ${cs.length?`<button class="btn small ghost" style="flex:1" onclick="modalEstudoLivre('${d.id}')">${naFila?'Estudo extra':'Estudar assim mesmo'}</button>`:''}
+      <button class="btn small ghost" style="flex:1" onclick="deckSel='${d.id}';render()">Ver cards</button>
+    </div>
+  </div>`;
+}
+function pastaHTML(p){
+  const ds=decksDaPasta(p.id);
+  const ids=new Set(ds.map(d=>d.id));
+  const dv=S.cards.filter(c=>ids.has(c.deckId)&&c.due<=hojeStr()).length;
+  const aberta=p.aberta!==false;
+  return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div class="row">
+      <span style="font-size:19px;cursor:pointer" onclick="togglePasta('${p.id}')">📁</span>
+      <div class="grow" style="cursor:pointer" onclick="togglePasta('${p.id}')">
+        <div style="font-weight:700">${esc(p.nome)}</div>
+        <div class="tag-mut">${ds.length} baralho${ds.length===1?'':'s'}${dv?` · <b style="color:var(--brand)">${dv} na fila</b>`:''}</div>
+      </div>
+      ${dv?`<button class="btn small" style="width:auto" onclick="iniciarReviewPasta('${p.id}')">Estudar</button>`:''}
+      <button class="btn quiet" style="width:auto;color:var(--mut);padding:8px" onclick="modalOpcoesPasta('${p.id}')" aria-label="Opções da pasta" title="Opções">${ICONE_OPCOES}</button>
+      <span style="color:var(--mut);cursor:pointer" onclick="togglePasta('${p.id}')">${aberta?'⌄':'›'}</span>
+    </div>
+    ${aberta?`<div style="margin-left:6px;padding-left:12px;border-left:2px solid var(--line)">
+      ${ds.map(d=>deckItemHTML(d)).join('')||`<div class="tag-mut" style="padding:10px 0">Pasta vazia — mova um baralho pra cá pelo menu ⋯ dele.</div>`}
+    </div>`:''}
+  </div>`;
+}
+function togglePasta(id){ const p=pastaPorId(id); if(!p) return; p.aberta=(p.aberta===false); salvar(); render(); }
+function modalPasta(id, deckParaMover){
+  const p=pastaPorId(id);
+  abrirModal(`<h3>${p?'Renomear pasta':'Nova pasta'}</h3>
+    <p class="sub" style="margin-top:4px">Pastas só organizam a lista — os cards continuam entrando na fila normalmente.</p>
+    <label>Nome</label><input id="in-pasta" placeholder="Ex.: 3º semestre" value="${p?esc(p.nome):''}">
+    <button class="btn" style="margin-top:20px" onclick="salvarPasta('${id||''}','${deckParaMover||''}')">${p?'Salvar':'Criar'}</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="fecharModal()">Cancelar</button>`);
+  setTimeout(()=>$('#in-pasta').focus(),100);
+}
+function salvarPasta(id, deckParaMover){
+  const nome=$('#in-pasta').value.trim(); if(!nome) return toast('Dê um nome à pasta');
+  if(id){ const p=pastaPorId(id); if(p) p.nome=nome; }
+  else{
+    const p={id:uid(), nome, aberta:true};
+    (S.pastas=S.pastas||[]).push(p);
+    const d=deckPorId(deckParaMover); if(d) d.pastaId=p.id;
+  }
+  salvar(); fecharModal(); render();
+  toast(id?'Pasta renomeada':'Pasta criada 📁');
+}
+function modalOpcoesPasta(id){
+  const p=pastaPorId(id); if(!p) return;
+  const ds=decksDaPasta(id);
+  abrirModal(`<h3>📁 ${esc(p.nome)}</h3>
+    <p class="sub" style="margin-top:4px">${ds.length} baralho${ds.length===1?'':'s'} dentro dela</p>
+    <div class="card" style="padding:6px 14px">
+      <div class="item" style="cursor:pointer" onclick="modalPasta('${id}')"><div class="grow" style="font-weight:600">✏️ Renomear pasta</div><span style="color:var(--mut)">›</span></div>
+      <div class="item" style="cursor:pointer" onclick="arquivarPasta('${id}')"><div class="grow" style="font-weight:600">📦 Arquivar os baralhos daqui</div><span style="color:var(--mut)">›</span></div>
+      <div class="item" style="cursor:pointer;color:var(--danger)" onclick="removerPasta('${id}')"><div class="grow" style="font-weight:600">🗑️ Excluir pasta</div><span>›</span></div>
+    </div>
+    <button class="btn ghost" style="margin-top:14px" onclick="fecharModal()">Cancelar</button>`);
+}
+function arquivarPasta(id){
+  const p=pastaPorId(id); if(!p) return;
+  const ds=decksDaPasta(id);
+  if(!ds.length){ fecharModal(); return toast('Essa pasta não tem baralho ativo'); }
+  confirmarSheet({
+    titulo:'Arquivar a pasta inteira?',
+    texto:`Os ${ds.length} baralho(s) de “${p.nome}” saem da fila de hoje. Nada é apagado — dá pra desarquivar quando quiser.`,
+    rotulo:'Arquivar tudo',
+    aoConfirmar(){
+      ds.forEach(d=>d.arquivado=true);
+      if(deckSel&&ds.some(d=>d.id===deckSel)) deckSel=null;
+      salvar(); render(); toast('Pasta arquivada 📦');
+    }
+  });
+}
+/* Excluir pasta nunca leva baralho junto: eles só voltam pra lista solta. */
+function removerPasta(id){
+  const p=pastaPorId(id); if(!p) return;
+  const n=S.decks.filter(d=>d.pastaId===id).length;
+  confirmarSheet({
+    titulo:'Excluir esta pasta?',
+    texto:n?`Os ${n} baralho(s) dentro dela continuam existindo — só voltam pra lista solta, com todos os cards.`:'A pasta está vazia.',
+    rotulo:'Excluir pasta',
+    perigo:true,
+    aoConfirmar(){
+      S.decks.forEach(d=>{ if(d.pastaId===id) d.pastaId=null; });
+      S.pastas=(S.pastas||[]).filter(x=>x.id!==id);
+      salvar(); render(); toast('Pasta excluída');
+    }
+  });
+}
+function modalOpcoesDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  const p=pastaPorId(d.pastaId);
+  const cs=S.cards.filter(c=>c.deckId===id).length;
+  abrirModal(`<h3>${esc(d.nome)}</h3>
+    <p class="sub" style="margin-top:4px">${cs} cards · ${p?'na pasta '+esc(p.nome):'fora de pastas'}${d.arquivado?' · arquivado':''}</p>
+    <div class="card" style="padding:6px 14px">
+      <div class="item" style="cursor:pointer" onclick="modalRenomearDeck('${id}')"><div class="grow" style="font-weight:600">✏️ Renomear</div><span style="color:var(--mut)">›</span></div>
+      <div class="item" style="cursor:pointer" onclick="modalMoverDeck('${id}')"><div class="grow" style="font-weight:600">📁 Mover para pasta</div><span class="tag-mut">${p?esc(p.nome):'Sem pasta'}</span></div>
+      ${cs?`<div class="item" style="cursor:pointer" onclick="fecharModal();modalEstudoLivre('${id}')"><div class="grow" style="font-weight:600">🎯 Estudo personalizado</div><span style="color:var(--mut)">›</span></div>`:''}
+      <div class="item" style="cursor:pointer" onclick="${d.arquivado?`desarquivarDeck('${id}')`:`arquivarDeck('${id}')`}">
+        <div class="grow"><div style="font-weight:600">${d.arquivado?'📤 Desarquivar':'📦 Arquivar'}</div>
+        <div class="tag-mut">${d.arquivado?'volta pra fila de hoje':'sai da fila de hoje sem apagar nada'}</div></div><span style="color:var(--mut)">›</span></div>
+      <div class="item" style="cursor:pointer;color:var(--danger)" onclick="removerDeck('${id}')"><div class="grow" style="font-weight:600">🗑️ Excluir baralho</div><span>›</span></div>
+    </div>
+    <button class="btn ghost" style="margin-top:14px" onclick="fecharModal()">Cancelar</button>`);
+}
+function modalRenomearDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  abrirModal(`<h3>Renomear baralho</h3>
+    <label>Nome</label><input id="in-deck-nome" value="${esc(d.nome)}">
+    <button class="btn" style="margin-top:20px" onclick="renomearDeck('${id}')">Salvar</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="fecharModal()">Cancelar</button>`);
+  setTimeout(()=>$('#in-deck-nome').focus(),100);
+}
+function renomearDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  const nome=$('#in-deck-nome').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
+  d.nome=nome; salvar(); fecharModal(); render(); toast('Baralho renomeado');
+}
+function modalMoverDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  const atual=d.pastaId||null;
+  const marca=on=>on?'<span style="color:var(--brand);font-weight:800">✓</span>':'<span style="color:var(--mut)">›</span>';
+  abrirModal(`<h3>Mover para pasta</h3>
+    <p class="sub" style="margin-top:4px">${esc(d.nome)}</p>
+    <div class="card" style="padding:6px 14px">
+      <div class="item" style="cursor:pointer" onclick="moverDeck('${id}','')"><div class="grow" style="font-weight:600">Sem pasta</div>${marca(!atual)}</div>
+      ${(S.pastas||[]).map(p=>`<div class="item" style="cursor:pointer" onclick="moverDeck('${id}','${p.id}')"><div class="grow" style="font-weight:600">📁 ${esc(p.nome)}</div>${marca(atual===p.id)}</div>`).join('')}
+    </div>
+    <button class="btn ghost" style="margin-top:14px" onclick="modalPasta('','${id}')">+ Criar pasta nova</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="fecharModal()">Cancelar</button>`);
+}
+function moverDeck(id, pastaId){
+  const d=deckPorId(id); if(!d) return;
+  d.pastaId=pastaId||null;
+  const p=pastaPorId(d.pastaId); if(p) p.aberta=true;
+  salvar(); fecharModal(); render();
+  toast(p?`Movido para ${p.nome} 📁`:'Baralho fora de pastas');
+}
+function arquivarDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  d.arquivado=true;
+  if(deckSel===id) deckSel=null;
+  mostrarArquivados=true;
+  salvar(); fecharModal(); render();
+  toast('Arquivado — saiu da fila de hoje 📦');
+}
+function desarquivarDeck(id){
+  const d=deckPorId(id); if(!d) return;
+  d.arquivado=false;
+  const p=pastaPorId(d.pastaId); if(p) p.aberta=true;
+  salvar(); fecharModal(); render();
+  toast('De volta à ativa ✨');
+}
 function normBusca(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function cardsFiltrados(id){
   const cs=S.cards.filter(c=>c.deckId===id);
@@ -1115,12 +1308,22 @@ function renderDeck(id){
   const d=S.decks.find(x=>x.id===id);
   const cs=S.cards.filter(c=>c.deckId===id);
   const devidos=cs.filter(c=>c.due<=hojeStr());
-  const dv=devidos.length;
+  const dv=devidos.length, arq=!!d.arquivado, pasta=pastaPorId(d.pastaId);
   $('#scr-cards').innerHTML=`
     <button class="btn quiet" style="padding-left:0" onclick="deckSel=null;render()">‹ Baralhos</button>
     <h1 class="h-page">${esc(d.nome)}</h1>
     <div class="sub">${cs.length} cards · ${dv} na fila de hoje${dv?` (${resumoFila(devidos)})`:''}</div>
-    ${dv?`<button class="btn" style="margin-top:14px" onclick="iniciarReview('${id}')">Revisar este baralho (${dv})</button>`:''}
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+      <span class="chip sm" style="cursor:pointer" onclick="modalMoverDeck('${id}')">📁 ${pasta?esc(pasta.nome):'Sem pasta'}</span>
+      ${arq?'<span class="chip sm alerta">📦 Arquivado</span>':''}
+    </div>
+    ${arq?`<div class="card">
+      <div class="tag-mut">Arquivado: este baralho não entra mais na fila de hoje nem no contador da tela inicial. Os cards, as datas e o histórico continuam intactos — e você ainda pode estudar por aqui quando quiser.</div>
+      <button class="btn ghost" style="margin-top:10px" onclick="desarquivarDeck('${id}')">📤 Desarquivar</button>
+    </div>`:''}
+    ${(!arq&&dv)?`<button class="btn" style="margin-top:14px" onclick="iniciarReview('${id}')">Revisar este baralho (${dv})</button>`:''}
+    ${cs.length?`<button class="btn ghost" style="margin-top:10px" onclick="modalEstudoLivre('${id}')">🎯 Estudo personalizado</button>`:''}
+    ${(cs.length&&!dv&&!arq)?`<div class="tag-mut" style="margin-top:8px">Nada vencido por hoje ✨ Se quiser revisar assim mesmo, use o estudo personalizado — dá pra treinar sem mexer nas datas.</div>`:''}
     <div class="row" style="margin-top:12px;gap:8px">
       <button class="btn ghost" onclick="modalCard('${id}')">+ Card</button>
       <button class="btn ghost" onclick="modalImport('${id}')">Colar em lote</button>
@@ -1129,28 +1332,38 @@ function renderDeck(id){
     </div>
     ${cs.length>4?`<input id="in-buscaCard" placeholder="Buscar nos cards deste baralho..." value="${esc(buscaCard)}" style="margin-top:14px" oninput="buscaCard=this.value;renderListaCards('${id}')">`:''}
     <div class="card" id="lista-cards">${listaCardsHTML(id)}</div>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn ghost small" style="flex:1" onclick="modalMoverDeck('${id}')">📁 Mover</button>
+      <button class="btn ghost small" style="flex:1" onclick="${arq?`desarquivarDeck('${id}')`:`arquivarDeck('${id}')`}">${arq?'📤 Desarquivar':'📦 Arquivar'}</button>
+    </div>
     <button class="btn danger" onclick="removerDeck('${id}')">Excluir baralho</button>`;
 }
 function modalDeck(){
+  const ps=S.pastas||[];
   abrirModal(`<h3>Novo baralho</h3>
     <label>Nome</label><input id="in-deck" placeholder="Ex.: Anatomia — Coração">
+    ${ps.length?`<label>Pasta</label>
+    <select id="in-deck-pasta"><option value="">Sem pasta</option>${ps.map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>`:''}
     <button class="btn" style="margin-top:20px" onclick="salvarDeck()">Criar</button>`);
   setTimeout(()=>$('#in-deck').focus(),100);
 }
+function novoDeckObj(nome, pastaId){ return {id:uid(), nome, pastaId:pastaId||null, arquivado:false}; }
 function salvarDeck(){
   const nome=$('#in-deck').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
-  const d={id:uid(),nome}; S.decks.push(d); deckSel=d.id;
+  const sel=$('#in-deck-pasta');
+  const d=novoDeckObj(nome, sel?sel.value:null); S.decks.push(d); deckSel=d.id;
+  const p=pastaPorId(d.pastaId); if(p) p.aberta=true;
   salvar(); fecharModal(); render();
 }
 /* ---------- Importar direto da lista de baralhos ---------- */
 let _importAlvo=null;
 function iniciarImportar(tipo){
   _importAlvo=tipo;
-  if(!S.decks.length) return modalNovoBaralhoImport();
+  if(!decksAtivos().length) return modalNovoBaralhoImport();
   abrirModal(`<h3>Importar para qual baralho?</h3>
     <div class="card" style="margin-top:10px;padding:6px 14px">
-      ${S.decks.map(d=>`<div class="item" style="cursor:pointer" onclick="prosseguirImportar('${d.id}')">
-        <div class="grow" style="font-weight:600">${esc(d.nome)}</div>
+      ${decksAtivos().map(d=>`<div class="item" style="cursor:pointer" onclick="prosseguirImportar('${d.id}')">
+        <div class="grow" style="font-weight:600">${esc(d.nome)}${pastaPorId(d.pastaId)?` <span class="tag-mut">· ${esc(pastaPorId(d.pastaId).nome)}</span>`:''}</div>
         <span style="color:var(--mut)">›</span>
       </div>`).join('')}
     </div>
@@ -1164,7 +1377,7 @@ function modalNovoBaralhoImport(){
 }
 function criarBaralhoEImportar(){
   const nome=$('#in-deck-imp').value.trim(); if(!nome) return toast('Dê um nome ao baralho');
-  const d={id:uid(),nome}; S.decks.push(d);
+  const d=novoDeckObj(nome); S.decks.push(d);
   salvar();
   prosseguirImportar(d.id);
 }
@@ -1177,14 +1390,24 @@ function prosseguirImportar(deckId){
   else if(tipo==='apkg') pedirApkg(deckId);
 }
 function removerDeck(id){
-  if(!confirm('Excluir baralho e todos os seus cards?')) return;
+  const d=deckPorId(id); if(!d) return;
+  const n=S.cards.filter(c=>c.deckId===id).length;
+  confirmarSheet({
+    titulo:'Excluir este baralho?',
+    texto:`“${d.nome}” e seus ${n} card(s) somem de vez. Não dá pra desfazer.\n\nSe é só pra tirar da frente, arquive: o baralho sai da fila de hoje e volta intacto quando você quiser.`,
+    rotulo:'Excluir baralho',
+    perigo:true,
+    aoConfirmar(){ excluirDeck(id); }
+  });
+}
+function excluirDeck(id){
   S.decks=S.decks.filter(d=>d.id!==id); S.cards=S.cards.filter(c=>c.deckId!==id);
   mediaApagarPrefixo(id+'/');
   Object.keys(S.midias||{}).forEach(k=>{ if(k.startsWith(id+'/')) delete S.midias[k]; });
   if(S.sync&&S.sync.codigo){
     fetch('/api/media?c='+encodeURIComponent(S.sync.codigo)+'&prefix='+encodeURIComponent(id+'/'),{method:'DELETE'}).catch(()=>{});
   }
-  deckSel=null; salvar(); render();
+  deckSel=null; salvar(); render(); toast('Baralho excluído');
 }
 function novoCardObj(deckId,frente,verso){
   return {id:uid(),deckId,frente,verso,ease:2.5,intervalo:0,reps:0,due:hojeStr(),visto:false};
@@ -1199,7 +1422,7 @@ function contarFila(cs){
 }
 function resumoFila(cs){
   const {novos,rev}=contarFila(cs);
-  return [novos?novos+' novo'+(novos>1?'s':''):'', rev?rev+' revisão'+(rev>1?'ões':''):''].filter(Boolean).join(' · ');
+  return [novos?novos+' novo'+(novos>1?'s':''):'', rev?rev+(rev>1?' revisões':' revisão'):''].filter(Boolean).join(' · ');
 }
 function modalCard(deckId){
   abrirModal(`<h3>Novo card</h3>
@@ -1662,18 +1885,105 @@ async function importarApkg(deckId,file){
 
 /* ---------- Sessão de revisão (SM-2) ---------- */
 let fila=[], cardAtual=null, mostrandoVerso=false, revStats=null, historico=[];
-function iniciarReview(deckId){
-  const h=hojeStr();
-  const devidos=S.cards.filter(c=>c.due<=h && (!deckId||c.deckId===deckId));
-  if(!devidos.length) return toast('Nada vencido por aqui ✨');
-  /* Primeiro o que ja foi estudado e venceu, depois o material novo — se a sessao for
-     interrompida, o que estava prestes a ser esquecido ja passou. */
-  const baralhar=a=>a.sort(()=>Math.random()-.5);
-  fila=baralhar(devidos.filter(c=>!ehNovo(c))).concat(baralhar(devidos.filter(ehNovo)));
+/* revLivre = treino fora da data marcada: as respostas nao reagendam nada (ver
+   "estudo personalizado" mais abaixo). revDeckId guarda de qual baralho veio a sessao,
+   pra oferecer "estudar mais" no fim. */
+let revDeckId=null, revLivre=false, revTitulo='';
+const baralhar=a=>a.sort(()=>Math.random()-.5);
+/* Primeiro o que ja foi estudado e venceu, depois o material novo — se a sessao for
+   interrompida, o que estava prestes a ser esquecido ja passou. */
+function ordenarFila(cs){ return baralhar(cs.filter(c=>!ehNovo(c))).concat(baralhar(cs.filter(ehNovo))); }
+function comecarSessao(cards, deckId, livre, titulo){
+  fila=cards; cardAtual=null; mostrandoVerso=false;
   revStats={total:0,acertos:0};
   historico=[];
+  revDeckId=deckId||null; revLivre=!!livre; revTitulo=titulo||'';
+  fecharModal();
   $('#review').classList.add('active');
   proximoCard();
+}
+function iniciarReview(deckId){
+  const h=hojeStr();
+  const base=deckId?S.cards.filter(c=>c.deckId===deckId):cardsDeDecksAtivos();
+  const devidos=base.filter(c=>c.due<=h);
+  if(!devidos.length) return toast('Nada vencido por aqui ✨');
+  comecarSessao(ordenarFila(devidos), deckId||null, false, '');
+}
+function iniciarReviewPasta(pastaId){
+  const h=hojeStr(), p=pastaPorId(pastaId);
+  const ids=new Set(decksDaPasta(pastaId).map(d=>d.id));
+  const devidos=S.cards.filter(c=>ids.has(c.deckId)&&c.due<=h);
+  if(!devidos.length) return toast('Nada vencido nesta pasta ✨');
+  comecarSessao(ordenarFila(devidos), null, false, p?'📁 '+p.nome:'');
+}
+
+/* ---------- Estudo personalizado ----------
+   Terminou a fila do baralho e quer estudar mais mesmo assim? Aqui da pra montar uma
+   sessao fora da data marcada. Em "treino livre" nada de agendamento muda — e so
+   pratica, o card volta a aparecer na data que ja estava. Em "adiantar revisao" a
+   resposta vale como revisao de verdade e o card ganha data nova a partir de hoje. */
+const DICAS_ESTUDO={
+  livre:'Treino livre: as datas ficam como estão. O card continua marcado pro dia que já estava — isso aqui é só reforço extra.',
+  adiantar:'Adiantando: cada resposta vale como revisão de verdade e o card ganha uma data nova a partir de hoje.'
+};
+function cardsDoEscopo(deckId, escopo){
+  const cs=S.cards.filter(c=>c.deckId===deckId);
+  if(escopo==='novos') return baralhar(cs.filter(ehNovo));
+  if(escopo==='vistos') return baralhar(cs.filter(c=>!ehNovo(c)));
+  /* mais errados primeiro: o SM-2 derruba o `ease` de quem vive dando trabalho */
+  if(escopo==='dificeis') return cs.filter(c=>!ehNovo(c)).sort((a,b)=>(a.ease-b.ease)||(a.due<b.due?-1:1));
+  if(escopo==='proximos') return cs.slice().sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0);
+  return ordenarFila(cs.slice());
+}
+function modalEstudoLivre(deckId){
+  const d=deckPorId(deckId); if(!d) return;
+  const cs=S.cards.filter(c=>c.deckId===deckId);
+  if(!cs.length) return toast('Esse baralho ainda não tem cards');
+  const novos=cs.filter(ehNovo).length, vistos=cs.length-novos;
+  const venc=cs.filter(c=>c.due<=hojeStr()).length;
+  const opt=(v,t,n)=>`<option value="${v}"${n===0?' disabled':''}>${t}${n===undefined?'':` (${n})`}</option>`;
+  abrirModal(`<h3>🎯 Estudo personalizado</h3>
+    <p class="sub" style="margin-top:4px">${esc(d.nome)} · ${cs.length} cards · ${venc?`${venc} vencido${venc>1?'s':''} hoje`:'nada vencido hoje'}</p>
+    <label>O que revisar</label>
+    <select id="es-escopo">
+      ${opt('todos','Todos os cards do baralho',cs.length)}
+      ${opt('dificeis','Os que eu mais erro',vistos)}
+      ${opt('proximos','Os que vencem primeiro',cs.length)}
+      ${opt('novos','Só os cards novos',novos)}
+      ${opt('vistos','Só os que eu já estudei',vistos)}
+    </select>
+    <label>Quantos cards</label>
+    <select id="es-quant">
+      <option value="10">10 cards</option>
+      <option value="20" selected>20 cards</option>
+      <option value="30">30 cards</option>
+      <option value="50">50 cards</option>
+      <option value="0">Todos que couberem</option>
+    </select>
+    <label>Conta como revisão?</label>
+    <select id="es-modo" onchange="dicaEstudoLivre()">
+      <option value="livre">Treino livre — não mexe nas datas</option>
+      <option value="adiantar">Adiantar revisão — reagenda normalmente</option>
+    </select>
+    <p class="tag-mut" id="es-dica" style="margin-top:10px">${DICAS_ESTUDO.livre}</p>
+    <button class="btn" style="margin-top:18px" onclick="comecarEstudoLivre('${deckId}')">Começar</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="fecharModal()">Cancelar</button>`);
+}
+function dicaEstudoLivre(){
+  const el=$('#es-dica'), m=$('#es-modo');
+  if(el&&m) el.textContent=DICAS_ESTUDO[m.value]||'';
+}
+function comecarEstudoLivre(deckId){
+  const escopo=$('#es-escopo').value, modo=$('#es-modo').value;
+  const quant=parseInt($('#es-quant').value,10)||0;
+  let cs=cardsDoEscopo(deckId, escopo);
+  if(!cs.length) return toast('Nenhum card nesse filtro');
+  if(quant>0) cs=cs.slice(0,quant);
+  const livre=modo==='livre', n=cs.length;
+  comecarSessao(cs, deckId, livre, livre?'Treino livre':'Adiantando revisão');
+  toast(livre
+    ? `Treino livre: ${n} card${n>1?'s':''} — nenhuma data vai mudar`
+    : `Adiantando ${n} card${n>1?'s':''} de revisão`);
 }
 function proximoCard(){
   if(!fila.length) return fimReview();
@@ -1684,7 +1994,8 @@ function proximoCard(){
 function atualizarContador(){
   const restantes=cardAtual?[cardAtual,...fila]:fila.slice();
   const detalhe=resumoFila(restantes);
-  $('#rv-count').innerHTML=`${restantes.length} na fila${detalhe?`<div class="tag-mut" style="font-weight:600">${detalhe}</div>`:''}`;
+  const faixa=revTitulo?`<div style="font-weight:800;color:var(--brand);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">${esc(revTitulo)}</div>`:'';
+  $('#rv-count').innerHTML=`${faixa}${restantes.length} na fila${detalhe?`<div class="tag-mut" style="font-weight:600">${detalhe}</div>`:''}`;
 }
 function pularCard(){
   if(!cardAtual) return;
@@ -1701,10 +2012,10 @@ function desenharCard(){
   hidratarImagens($('#rv-card'));
   $('#rv-actions').innerHTML= (mostrandoVerso
     ? `<div class="grade">
-        <button class="g0" onclick="avaliar(0)">Errei<small>&lt; 10 min</small></button>
-        <button class="g3" onclick="avaliar(3)">Difícil<small>${prevInt(3)}</small></button>
-        <button class="g4" onclick="avaliar(4)">Bom<small>${prevInt(4)}</small></button>
-        <button class="g5" onclick="avaliar(5)">Fácil<small>${prevInt(5)}</small></button>
+        <button class="g0" onclick="avaliar(0)">Errei<small>${revLivre?'volta na fila':'&lt; 10 min'}</small></button>
+        <button class="g3" onclick="avaliar(3)">Difícil<small>${rotuloNota(3)}</small></button>
+        <button class="g4" onclick="avaliar(4)">Bom<small>${rotuloNota(4)}</small></button>
+        <button class="g5" onclick="avaliar(5)">Fácil<small>${rotuloNota(5)}</small></button>
       </div>`
     : `<button class="btn" onclick="virarCard()">Mostrar resposta</button>`)
     + `<div class="row" style="margin-top:8px;gap:8px">
@@ -1742,24 +2053,33 @@ function prevInt(q){
   const r=calcSM2(cardAtual,q);
   return r.intervalo===1?'1 dia':r.intervalo+' dias';
 }
+/* No treino livre nao ha data nova pra prometer: a nota so decide se o card volta na fila. */
+function rotuloNota(q){ return revLivre?'sem reagendar':prevInt(q); }
 function avaliar(q){
   const estadoAnterior={ease:cardAtual.ease, intervalo:cardAtual.intervalo, reps:cardAtual.reps, due:cardAtual.due, visto:cardAtual.visto};
   const cardId=cardAtual.id;
-  const r=calcSM2(cardAtual,q);
-  Object.assign(cardAtual,r);
-  cardAtual.visto=true; // respondeu uma vez: daqui pra frente e card de revisao, mesmo tendo errado
+  let requeued=false, contouNovo=false;
+  if(revLivre){
+    /* treino livre: o card fica exatamente como estava — mesma data, mesmo ease, mesmo
+       `visto`. Errar so traz ele de volta nesta sessao. */
+    if(q<3){ fila.splice(Math.min(3,fila.length),0,cardAtual); requeued=true; }
+  }else{
+    const r=calcSM2(cardAtual,q);
+    Object.assign(cardAtual,r);
+    cardAtual.visto=true; // respondeu uma vez: daqui pra frente e card de revisao, mesmo tendo errado
+    if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); requeued=true; }
+    else cardAtual.due=addDias(hojeStr(),r.intervalo);
+    /* estreia do card conta como "novo" do dia, como no Anki */
+    contouNovo=!estadoAnterior.visto;
+  }
   revStats.total++;
   if(q>=4) revStats.acertos++;
-  let requeued=false;
-  if(q<3){ cardAtual.due=hojeStr(); fila.splice(Math.min(3,fila.length),0,cardAtual); requeued=true; }
-  else cardAtual.due=addDias(hojeStr(),r.intervalo);
   const h=hojeStr();
   S.reviews[h]=S.reviews[h]||{total:0,acertos:0,novos:0};
   S.reviews[h].total++; if(q>=4) S.reviews[h].acertos++;
-  /* estreia do card conta como "novo" do dia, como no Anki */
-  if(!estadoAnterior.visto) S.reviews[h].novos=(S.reviews[h].novos||0)+1;
+  if(contouNovo) S.reviews[h].novos=(S.reviews[h].novos||0)+1;
   marcarAtividade(); salvar();
-  historico.push({cardId, estadoAnterior, q, requeued, diaReview:h});
+  historico.push({cardId, estadoAnterior, q, requeued, contouNovo, diaReview:h});
   proximoCard();
 }
 function desfazerUltima(){
@@ -1778,7 +2098,7 @@ function desfazerUltima(){
   if(rd){
     rd.total=Math.max(0,rd.total-1);
     if(h.q>=4) rd.acertos=Math.max(0,rd.acertos-1);
-    if(!h.estadoAnterior.visto) rd.novos=Math.max(0,(rd.novos||0)-1);
+    if(h.contouNovo) rd.novos=Math.max(0,(rd.novos||0)-1);
     if(rd.total===0) delete S.reviews[h.diaReview];
   }
   salvar();
@@ -1811,9 +2131,20 @@ function excluirCardAtual(){
 }
 function fimReview(){
   $('#review').classList.remove('active');
-  const pct=revStats.total?Math.round(100*revStats.acertos/revStats.total):0;
-  toast(`Sessão concluída: ${revStats.total} cards · ${pct}% de retenção 🎉`);
+  const total=revStats?revStats.total:0;
+  const pct=total?Math.round(100*revStats.acertos/total):0;
+  const deckId=revDeckId, livre=revLivre;
   render();
+  if(!total) return;
+  const d=deckId?deckPorId(deckId):null;
+  const vencendo=d?S.cards.filter(c=>c.deckId===d.id&&c.due<=hojeStr()).length:0;
+  /* Terminou a fila e ainda quer mais? O caminho pro estudo personalizado fica aqui,
+     no momento em que a vontade aparece. */
+  abrirModal(`<h3>Sessão concluída 🎉</h3>
+    <p class="sub" style="margin-top:6px">${total} card${total>1?'s':''} · ${pct}% de retenção${livre?'<br>Treino livre: nenhuma data foi alterada.':''}</p>
+    ${d?`<button class="btn" style="margin-top:18px" onclick="fecharModal();modalEstudoLivre('${d.id}')">Estudar mais este baralho</button>
+    ${vencendo?`<button class="btn ghost" style="margin-top:8px" onclick="fecharModal();iniciarReview('${d.id}')">Continuar a fila (${vencendo})</button>`:''}`:''}
+    <button class="btn ghost" style="margin-top:${d?'8':'18'}px" onclick="fecharModal()">Fechar</button>`);
 }
 function fecharReview(){ $('#review').classList.remove('active'); render(); }
 
@@ -2180,6 +2511,7 @@ async function puxarSync(forcar){
       const codigo=S.sync.codigo;
       S=Object.assign(PADRAO(), remoto);
       S.sync=S.sync||{}; S.sync.codigo=codigo;
+      migrarCards(); migrarDecks();
       garantirVersaoSemestre();
       salvarLocal(); aplicarTema(); render();
       return true;
